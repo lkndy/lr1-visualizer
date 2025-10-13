@@ -1,0 +1,50 @@
+# Node
+node_modules/
+*.log
+
+# Bun
+.bun/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pytmp
+*.mypy_cache/
+*.pytest_cache/
+# test cache
+.pytest_cache/
+# VS Code
+.vscode/
+# Environment
+.env
+.env.*
+.venv/
+venv/
+backend/.venv/
+
+# Uvicorn
+*.db
+*.sqlite3
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Frontend
+frontend/node_modules
+frontend/dist/
+frontend/.next/
+frontend/.vercel/
+
+# Package managers
+.pnpm-debug.log
+bun.lockb
+yarn.lock
+package-lock.json
+
+# Misc
+*.swp
+*.swo

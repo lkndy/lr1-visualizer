@@ -1,0 +1,299 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for the LR(1) parser visualizer */
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .input-field {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
+  }
+  
+  .textarea-field {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 resize-vertical;
+  }
+  
+  .card {
+    @apply bg-white rounded-lg shadow-md border border-gray-200;
+  }
+  
+  .tab-button {
+    @apply px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200;
+  }
+  
+  .tab-button-active {
+    @apply bg-primary-100 text-primary-700 border border-primary-200;
+  }
+  
+  .tab-button-inactive {
+    @apply text-gray-600 hover:text-gray-800 hover:bg-gray-100;
+  }
+  
+  .error-message {
+    @apply text-red-600 text-sm mt-1;
+  }
+  
+  .success-message {
+    @apply text-green-600 text-sm mt-1;
+  }
+  
+  .warning-message {
+    @apply text-yellow-600 text-sm mt-1;
+  }
+  
+  .info-message {
+    @apply text-blue-600 text-sm mt-1;
+  }
+}
+
+@layer utilities {
+  .animate-pulse-glow {
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+  
+  .animate-bounce-gentle {
+    animation: bounceGentle 0.6s ease-in-out;
+  }
+  
+  .text-shadow {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+  
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e0 #f7fafc;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: #f7fafc;
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #cbd5e0;
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: #a0aec0;
+  }
+}
+
+/* Custom animations for parsing visualizations */
+@keyframes node-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes edge-draw {
+  0% {
+    stroke-dashoffset: 100;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes stack-push {
+  0% {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes stack-pop {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+}
+
+.animate-node-appear {
+  animation: node-appear 0.3s ease-out;
+}
+
+.animate-edge-draw {
+  animation: edge-draw 0.5s ease-out;
+}
+
+.animate-stack-push {
+  animation: stack-push 0.3s ease-out;
+}
+
+.animate-stack-pop {
+  animation: stack-pop 0.3s ease-out;
+}
+
+/* Syntax highlighting for grammar editor */
+.grammar-editor .token.production {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.grammar-editor .token.arrow {
+  color: #059669;
+  font-weight: bold;
+}
+
+.grammar-editor .token.terminal {
+  color: #dc2626;
+}
+
+.grammar-editor .token.non-terminal {
+  color: #7c3aed;
+  font-weight: 500;
+}
+
+.grammar-editor .token.epsilon {
+  color: #6b7280;
+  font-style: italic;
+}
+
+/* Parsing table styles */
+.parsing-table {
+  @apply border-collapse w-full text-sm;
+}
+
+.parsing-table th {
+  @apply bg-gray-100 border border-gray-300 px-2 py-1 text-left font-medium;
+}
+
+.parsing-table td {
+  @apply border border-gray-300 px-2 py-1 text-center;
+}
+
+.parsing-table .state-header {
+  @apply bg-primary-50 text-primary-700 font-semibold;
+}
+
+.parsing-table .action-shift {
+  @apply bg-blue-50 text-blue-700 font-medium;
+}
+
+.parsing-table .action-reduce {
+  @apply bg-green-50 text-green-700 font-medium;
+}
+
+.parsing-table .action-accept {
+  @apply bg-yellow-50 text-yellow-700 font-medium;
+}
+
+.parsing-table .action-error {
+  @apply bg-red-50 text-red-700;
+}
+
+.parsing-table .cell-highlighted {
+  @apply bg-primary-100 border-primary-300 animate-pulse-glow;
+}
+
+/* Automaton visualization styles */
+.automaton-node {
+  @apply cursor-pointer transition-all duration-200;
+}
+
+.automaton-node:hover {
+  @apply transform scale-105;
+}
+
+.automaton-node.current {
+  @apply animate-pulse-glow;
+}
+
+.automaton-edge {
+  @apply transition-all duration-200;
+}
+
+.automaton-edge.active {
+  @apply stroke-primary-600 stroke-2;
+}
+
+/* AST visualization styles */
+.ast-node {
+  @apply cursor-pointer transition-all duration-200;
+}
+
+.ast-node:hover {
+  @apply transform scale-105;
+}
+
+.ast-node.new {
+  @apply animate-node-appear;
+}
+
+.ast-edge {
+  @apply transition-all duration-200;
+}
+
+.ast-edge.new {
+  @apply animate-edge-draw;
+}
+
+/* Stack visualization styles */
+.stack-item {
+  @apply transition-all duration-200;
+}
+
+.stack-item.new {
+  @apply animate-stack-push;
+}
+
+.stack-item.removed {
+  @apply animate-stack-pop;
+}
+
+/* Loading spinner */
+.spinner {
+  @apply animate-spin rounded-full border-2 border-gray-300 border-t-primary-600;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .parsing-table {
+    @apply text-xs;
+  }
+  
+  .parsing-table th,
+  .parsing-table td {
+    @apply px-1 py-1;
+  }
+}
