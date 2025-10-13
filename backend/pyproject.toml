@@ -2,31 +2,17 @@
 name = "lr1-parser-visualizer"
 version = "1.0.0"
 description = "Interactive LR(1) parser visualizer with step-by-step execution"
-authors = [
-    {name = "LR(1) Parser Visualizer Team"}
-]
-readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi==0.104.1",
-    "uvicorn[standard]==0.24.0",
-    "pydantic==2.5.0",
-    "websockets==12.0",
-    "python-multipart==0.0.6",
+    "fastapi>=0.104.1",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.6.0",
+    "websockets>=12.0",
+    "python-multipart>=0.0.6",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
-    "pytest==7.4.3",
-    "pytest-asyncio==0.21.1",
-]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.uv]
-dev-dependencies = [
-    "pytest==7.4.3",
-    "pytest-asyncio==0.21.1",
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1",
 ]

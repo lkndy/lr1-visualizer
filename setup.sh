@@ -38,13 +38,18 @@ if ! command -v uv &> /dev/null; then
     source $HOME/.cargo/env
 fi
 
+# Pin to Python 3.11 for compatibility
+echo "Installing Python 3.11..."
+uv python install 3.11
+uv python pin 3.11
+
 # Create isolated virtual environment with uv (if it doesn't exist)
 echo "Creating isolated Python environment..."
-uv venv --python 3.11
+uv venv
 
 # Install Python dependencies using uv (no pip!)
 echo "Installing Python dependencies with uv..."
-uv sync --dev
+uv sync --group dev
 
 echo "✅ Backend setup complete"
 
@@ -68,14 +73,17 @@ echo "✅ Frontend setup complete"
 echo ""
 echo "🎉 Setup complete! To start the application:"
 echo ""
-echo "Backend:"
+echo "Backend (with debug logging):"
 echo "  cd backend"
-echo "  uv run python main.py  # Uses uv's virtual environment automatically"
-echo "  # OR manually: source .venv/bin/activate && python main.py"
+echo "  DEBUG=true uv run python main.py"
+echo "  # OR: uv run python main.py"
 echo ""
-echo "Frontend:"
-echo "  cd frontend && bun run dev"
+echo "Frontend (with debug logging):"
+echo "  cd frontend && VITE_DEBUG=true bun run dev"
+echo "  # OR: cd frontend && bun run dev"
 echo ""
 echo "Then open http://localhost:3000 in your browser"
+echo ""
+echo "💡 Debug logging is enabled by default. Set DEBUG=false or VITE_DEBUG=false to disable."
 echo ""
 echo "💡 The backend now uses an isolated Python environment at backend/.venv/"

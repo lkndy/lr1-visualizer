@@ -3,16 +3,13 @@
 from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass
 
-from .types import ActionType, ParsingAction, ConflictInfo
-from .grammar import Grammar
-from .automaton import Automaton
-from .items import LR1Item
+from parser.types import ActionType, ParsingAction, ConflictInfo, Symbol, SymbolType
 
 
 class ParsingTable:
     """Represents the LR(1) parsing tables (ACTION and GOTO)."""
     
-    def __init__(self, automaton: Automaton):
+    def __init__(self, automaton):
         """Generate parsing tables from the LR(1) automaton."""
         self.automaton = automaton
         self.grammar = automaton.grammar
@@ -29,13 +26,12 @@ class ParsingTable:
         self.goto_table = {}
         
         # Get all terminals and non-terminals
-        terminals = self.grammar.terminals
-        non_terminals = self.grammar.non_terminals
+        terminals = set(self.grammar.terminals)
+        non_terminals = set(self.grammar.non_terminals)
         
-        # Add end marker to terminals if not present
-        end_marker = self.grammar.productions[0].rhs[0]  # S from S' -> S
-        if end_marker not in terminals:
-            terminals.add(end_marker)
+        # Ensure end-of-input marker '$' is a terminal for ACTION lookups
+        if all(symbol.name != "$" for symbol in terminals):
+            terminals.add(Symbol("$", SymbolType.TERMINAL))
         
         # Build ACTION and GOTO tables
         for state_index, state in enumerate(self.automaton.states):

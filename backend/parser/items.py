@@ -2,10 +2,8 @@
 
 from typing import List, Dict, Set, FrozenSet
 from dataclasses import dataclass
-from functools import lru_cache
 
-from .types import Symbol, SymbolType, Production
-from .grammar import Grammar
+from parser.types import Symbol, SymbolType, Production
 
 
 @dataclass(frozen=True)
@@ -91,12 +89,12 @@ class ItemSet:
         self.items = frozenset(items)  # Use frozenset for hashability
     
     @classmethod
-    def from_initial_item(cls, item: LR1Item, grammar: Grammar) -> 'ItemSet':
+    def from_initial_item(cls, item: LR1Item, grammar) -> 'ItemSet':
         """Create item set starting with a single item and computing its closure."""
         items = {item}
         return cls(items).closure(grammar)
     
-    def closure(self, grammar: Grammar) -> 'ItemSet':
+    def closure(self, grammar) -> 'ItemSet':
         """Compute the closure of this item set.
         
         The closure of a set of items is the set of all items that can be derived
@@ -118,8 +116,8 @@ class ItemSet:
                     B = symbol_after_dot
                     beta = item.beta[1:]  # β (symbols after B)
                     
-                    # Compute FIRST(βa)
-                    first_beta_a = grammar.first(beta + [item.lookahead])
+                    # Compute FIRST(βa). Use tuple for caching compatibility
+                    first_beta_a = grammar.first(tuple(beta + [item.lookahead]))
                     
                     # For each production B -> γ
                     for production in grammar.get_productions_for_symbol(B):
@@ -139,7 +137,7 @@ class ItemSet:
         
         return ItemSet(items)
     
-    def goto(self, grammar: Grammar, symbol: Symbol) -> 'ItemSet':
+    def goto(self, grammar, symbol: Symbol) -> 'ItemSet':
         """Compute GOTO(I, X) where I is this item set and X is a symbol.
         
         GOTO(I, X) = CLOSURE({[A -> αX·β, a] | [A -> α·Xβ, a] ∈ I})
@@ -191,10 +189,10 @@ class ItemSet:
 
 
 # Add FIRST computation to Grammar class
-def _extend_grammar_with_first(grammar: Grammar):
+# This function will be imported and used in grammar.py to avoid circular imports
+def extend_grammar_with_first(grammar):
     """Extend Grammar class with FIRST computation."""
     
-    @lru_cache(maxsize=None)
     def first(self, symbols: tuple) -> Set[Symbol]:
         """Compute FIRST set for a sequence of symbols.
         
@@ -244,6 +242,6 @@ def _extend_grammar_with_first(grammar: Grammar):
         return False
     
     # Add methods to Grammar class
-    grammar.first = first.__get__(grammar, Grammar)
-    grammar._first_of_non_terminal = _first_of_non_terminal.__get__(grammar, Grammar)
-    grammar._has_epsilon_production = _has_epsilon_production.__get__(grammar, Grammar)
+    grammar.first = first.__get__(grammar, grammar.__class__)
+    grammar._first_of_non_terminal = _first_of_non_terminal.__get__(grammar, grammar.__class__)
+    grammar._has_epsilon_production = _has_epsilon_production.__get__(grammar, grammar.__class__)

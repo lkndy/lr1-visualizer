@@ -3,9 +3,9 @@
 from typing import Dict, Set, List, Optional, Tuple
 from dataclasses import dataclass
 
-from .types import Symbol, SymbolType
-from .grammar import Grammar
-from .items import LR1Item, ItemSet
+from parser.types import Symbol, SymbolType
+from parser.grammar import Grammar
+from parser.items import LR1Item, ItemSet
 
 
 @dataclass
@@ -22,7 +22,7 @@ class StateTransition:
 class Automaton:
     """Represents the LR(1) automaton (canonical collection of LR(1) item sets)."""
     
-    def __init__(self, grammar: Grammar):
+    def __init__(self, grammar):
         """Initialize and build the LR(1) automaton from the grammar."""
         self.grammar = grammar
         self.states: List[ItemSet] = []
@@ -90,8 +90,8 @@ class Automaton:
     
     def _add_first_computation(self):
         """Add FIRST computation methods to the grammar."""
-        from .items import _extend_grammar_with_first
-        _extend_grammar_with_first(self.grammar)
+        from parser.items import extend_grammar_with_first
+        extend_grammar_with_first(self.grammar)
     
     def get_state_number(self, item_set: ItemSet) -> Optional[int]:
         """Get the state number for a given item set."""

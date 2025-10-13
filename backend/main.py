@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 
-from .api.routes import router
+from api.routes import router
 
 # Create FastAPI app
 app = FastAPI(

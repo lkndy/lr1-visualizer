@@ -145,7 +145,7 @@ Use ε or empty for epsilon productions.`}
       <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h3 className="text-sm font-medium text-blue-800 mb-2">Grammar Syntax Help</h3>
         <ul className="text-sm text-blue-700 space-y-1">
-          <li>• Use <code className="bg-blue-100 px-1 rounded">-></code> or <code className="bg-blue-100 px-1 rounded">→</code> for production rules</li>
+          <li>• Use <code className="bg-blue-100 px-1 rounded">{'->'}</code> or <code className="bg-blue-100 px-1 rounded">→</code> for production rules</li>
           <li>• Use <code className="bg-blue-100 px-1 rounded">|</code> to separate alternatives</li>
           <li>• Use <code className="bg-blue-100 px-1 rounded">ε</code> or leave empty for epsilon productions</li>
           <li>• Non-terminals: uppercase letters (e.g., <code className="bg-blue-100 px-1 rounded">E</code>, <code className="bg-blue-100 px-1 rounded">T</code>)</li>

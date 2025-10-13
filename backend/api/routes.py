@@ -4,8 +4,8 @@ from typing import Dict, List, Any, Optional
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from ..parser import Grammar, Automaton, ParsingTable, ParserEngine
-from ..parser.types import GrammarError, ConflictInfo
+from parser import Grammar, Automaton, ParsingTable, ParserEngine
+from utils.debug import info_log, error_log, log_api_request
 
 
 # Request/Response models
@@ -53,6 +53,8 @@ router = APIRouter(prefix="/api/v1", tags=["parser"])
 @router.post("/grammar/validate", response_model=GrammarResponse)
 async def validate_grammar(request: GrammarRequest) -> GrammarResponse:
     """Validate a grammar and return any errors."""
+    log_api_request("POST", "/grammar/validate", {"start_symbol": request.start_symbol})
+    
     try:
         # Parse grammar from text
         grammar = Grammar.from_string(request.grammar_text, request.start_symbol)
@@ -73,6 +75,7 @@ async def validate_grammar(request: GrammarRequest) -> GrammarResponse:
         if not errors:
             # Grammar is valid, build automaton and table
             try:
+                info_log("🧩 Building automaton and parsing table")
                 automaton = Automaton(grammar)
                 parsing_table = ParsingTable(automaton)
                 
@@ -86,6 +89,8 @@ async def validate_grammar(request: GrammarRequest) -> GrammarResponse:
                     "conflict_summary": parsing_table.get_conflict_summary()
                 }
                 
+                info_log("✅ Automaton and table built", grammar_info)
+                
                 return GrammarResponse(
                     valid=True,
                     errors=[],
@@ -93,6 +98,9 @@ async def validate_grammar(request: GrammarRequest) -> GrammarResponse:
                 )
                 
             except Exception as e:
+                import traceback
+                tb = traceback.format_exc()
+                error_log("💥 Automaton/table build failed", {"error": str(e), "trace": tb})
                 return GrammarResponse(
                     valid=False,
                     errors=[{
@@ -135,8 +143,14 @@ async def get_parsing_table(request: GrammarRequest) -> TableResponse:
             )
         
         # Build automaton and parsing table
-        automaton = Automaton(grammar)
-        parsing_table = ParsingTable(automaton)
+        try:
+            info_log("🧩 Building automaton and parsing table (table endpoint)")
+            automaton = Automaton(grammar)
+            parsing_table = ParsingTable(automaton)
+        except Exception as e:
+            import traceback
+            error_log("💥 Table build failed", {"error": str(e), "trace": traceback.format_exc()})
+            raise
         
         # Convert conflicts to dict format
         conflicts = []
@@ -163,6 +177,8 @@ async def get_parsing_table(request: GrammarRequest) -> TableResponse:
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        error_log("💥 /parser/table failed", {"error": str(e), "trace": traceback.format_exc()})
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -181,8 +197,14 @@ async def parse_input(request: ParsingRequest) -> ParsingResponse:
             )
         
         # Build automaton and parsing table
-        automaton = Automaton(grammar)
-        parsing_table = ParsingTable(automaton)
+        try:
+            info_log("🧩 Building automaton and parsing table (parse endpoint)")
+            automaton = Automaton(grammar)
+            parsing_table = ParsingTable(automaton)
+        except Exception as e:
+            import traceback
+            error_log("💥 Parse build failed", {"error": str(e), "trace": traceback.format_exc()})
+            raise
         
         if parsing_table.has_conflicts():
             raise HTTPException(
@@ -207,6 +229,8 @@ async def parse_input(request: ParsingRequest) -> ParsingResponse:
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        error_log("💥 /parser/parse failed", {"error": str(e), "trace": traceback.format_exc()})
         raise HTTPException(status_code=500, detail=str(e))
 
 

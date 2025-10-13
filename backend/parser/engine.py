@@ -4,10 +4,10 @@ from typing import List, Dict, Optional, Tuple, Any
 from dataclasses import dataclass
 import copy
 
-from .types import ParsingStep, ParsingAction, ActionType, ASTNode, SymbolType
-from .grammar import Grammar
-from .automaton import Automaton
-from .table import ParsingTable
+from parser.types import ParsingStep, ParsingAction, ActionType, ASTNode, SymbolType
+from parser.grammar import Grammar
+from parser.automaton import Automaton
+from parser.table import ParsingTable
 
 
 @dataclass
@@ -24,7 +24,7 @@ class ParseState:
 class ParserEngine:
     """LR(1) parsing engine for step-by-step execution."""
     
-    def __init__(self, grammar: Grammar, parsing_table: ParsingTable):
+    def __init__(self, grammar, parsing_table):
         """Initialize parser engine with grammar and parsing table."""
         self.grammar = grammar
         self.parsing_table = parsing_table

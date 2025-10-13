@@ -4,7 +4,8 @@ import re
 from typing import List, Dict, Set, Optional, Tuple
 from dataclasses import dataclass
 
-from .types import GrammarError, Production, Symbol, SymbolType
+from parser.types import GrammarError, Production, Symbol, SymbolType
+from utils.debug import debug_log, info_log, error_log, debug_timer
 
 
 @dataclass
@@ -18,6 +19,11 @@ class Grammar:
     
     def __init__(self, productions: List[Production], start_symbol: Symbol):
         """Initialize grammar with productions and start symbol."""
+        debug_log("🔧 Initializing Grammar", {
+            "num_productions": len(productions),
+            "start_symbol": str(start_symbol)
+        })
+        
         self.productions = productions
         self.start_symbol = start_symbol
         
@@ -28,6 +34,8 @@ class Grammar:
         # Add start symbol as non-terminal
         self.non_terminals.add(start_symbol)
         
+        self._epsilon_symbol = Symbol("ε", SymbolType.EPSILON)
+        
         # Extract symbols from productions
         for production in productions:
             self.non_terminals.add(production.lhs)
@@ -36,6 +44,11 @@ class Grammar:
                     self.terminals.add(symbol)
                 elif symbol.symbol_type == SymbolType.NON_TERMINAL:
                     self.non_terminals.add(symbol)
+        
+        debug_log("✅ Grammar initialized", {
+            "terminals": [str(t) for t in self.terminals],
+            "non_terminals": [str(nt) for nt in self.non_terminals]
+        })
     
     @classmethod
     def from_string(cls, grammar_text: str, start_symbol_name: str = "S") -> "Grammar":
@@ -55,6 +68,21 @@ class Grammar:
         
         lines = grammar_text.strip().split('\n')
         all_symbols: Dict[str, Symbol] = {start_symbol_name: start_symbol}
+        
+        # First pass: collect all LHS symbols as non-terminals
+        lhs_names: Set[str] = set()
+        for raw_line in lines:
+            raw = raw_line.strip()
+            if not raw or raw.startswith('#'):
+                continue
+            if '->' not in raw and '→' not in raw:
+                continue
+            sep = '->' if '->' in raw else '→'
+            lhs_candidate = raw.split(sep, 1)[0].strip()
+            if lhs_candidate:
+                lhs_names.add(lhs_candidate)
+                if lhs_candidate not in all_symbols:
+                    all_symbols[lhs_candidate] = Symbol(lhs_candidate, SymbolType.NON_TERMINAL)
         
         for line_num, line in enumerate(lines, 1):
             line = line.strip()
@@ -93,7 +121,12 @@ class Grammar:
                 alternatives = [alt.strip() for alt in rhs_str.split('|')]
                 
                 for alt in alternatives:
-                    if not alt:  # Empty alternative (epsilon)
+                    # Empty alternative (epsilon)
+                    if not alt:
+                        productions.append(Production(lhs, []))
+                        continue
+                    # Explicit epsilon token
+                    if alt == 'ε' or alt.lower() in ('epsilon', 'eps'):
                         productions.append(Production(lhs, []))
                         continue
                     
@@ -101,13 +134,29 @@ class Grammar:
                     tokens = cls._tokenize_rhs(alt)
                     
                     for token in tokens:
+                        # Skip explicit epsilon within tokenized RHS
+                        if token == 'ε' or token.lower() in ('epsilon', 'eps'):
+                            continue
                         if token not in all_symbols:
                             # Determine if terminal or non-terminal
-                            # Convention: lowercase = terminal, uppercase = non-terminal
-                            if token.islower() or token in ['id', 'num', 'string']:
-                                all_symbols[token] = Symbol(token, SymbolType.TERMINAL)
-                            else:
+                            # Two-pass rule:
+                            # - If token was seen on LHS, it's a non-terminal
+                            # - Otherwise classify by punctuation/common terminals/heuristic
+                            if token in lhs_names:
                                 all_symbols[token] = Symbol(token, SymbolType.NON_TERMINAL)
+                            else:
+                                # Convention: 
+                                # - Punctuation/special chars = terminal
+                                # - Common terminal names = terminal
+                                # - Lowercase words default to terminal
+                                # - Otherwise assume non-terminal
+                                if (token.islower() or 
+                                    token in ['id', 'num', 'string', 'true', 'false', 'null', 'number'] or
+                                    token in ['(', ')', '[', ']', '{', '}', '+', '-', '*', '/', '=', '<', '>', '<=', '>=', '==', '!=', '&&', '||', '!', '&', '|', '^', '~', '<<', '>>', '++', '--', '+=', '-=', '*=', '/=', '%=', '^=', '&=', '|=', '<<=', '>>=', '=>', '->', '::', '.', ',', ';', ':', '?', '??', '??=', '...', '..', '..='] or
+                                    not token.replace('_', '').replace('-', '').isalnum()):
+                                    all_symbols[token] = Symbol(token, SymbolType.TERMINAL)
+                                else:
+                                    all_symbols[token] = Symbol(token, SymbolType.NON_TERMINAL)
                         
                         rhs_symbols.append(all_symbols[token])
                     
@@ -153,8 +202,10 @@ class Grammar:
             
         return tokens
     
+    @debug_timer
     def validate(self) -> List[GrammarError]:
         """Validate the grammar and return any errors."""
+        debug_log("🔍 Validating grammar")
         errors = []
         
         # Check for undefined symbols
@@ -166,7 +217,10 @@ class Grammar:
         
         # Check that all non-terminals have productions
         non_terminals_with_productions = set(p.lhs for p in self.productions)
+        epsilon_symbol = self._epsilon_symbol
         for non_terminal in self.non_terminals:
+            if non_terminal in self.terminals or non_terminal == epsilon_symbol:
+                continue  # Skip terminals mistakenly added
             if non_terminal not in non_terminals_with_productions:
                 errors.append(GrammarError(
                     error_type="undefined_non_terminal",
@@ -182,13 +236,12 @@ class Grammar:
                     message=f"Non-terminal '{non_terminal.name}' is unreachable from start symbol"
                 ))
         
-        # Check for left recursion (simplified check)
+        # Left recursion is acceptable for LR parsers; log informationally only
         left_recursive = self._find_left_recursive_symbols()
-        for symbol in left_recursive:
-            errors.append(GrammarError(
-                error_type="left_recursion",
-                message=f"Symbol '{symbol.name}' has left recursion"
-            ))
+        if left_recursive:
+            info_log("ℹ️ Left recursion detected (allowed for LR parsers)", {
+                "symbols": [s.name for s in left_recursive]
+            })
         
         return errors
     

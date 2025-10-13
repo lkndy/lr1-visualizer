@@ -49,6 +49,10 @@ class Production:
         rhs_str = " ".join(str(symbol) for symbol in self.rhs) if self.rhs else "ε"
         return f"{self.lhs} → {rhs_str}"
 
+    def __hash__(self) -> int:
+        # Hash by immutable view of fields
+        return hash((self.lhs, tuple(self.rhs)))
+
 
 class ParsingAction(BaseModel):
     """Represents a parsing action (shift, reduce, accept, error)."""

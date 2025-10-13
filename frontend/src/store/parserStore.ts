@@ -11,6 +11,7 @@ import {
   ExampleGrammar,
   ExampleGrammarsResponse
 } from '../types/parser';
+import debug from '../utils/debug';
 
 // API base URL
 const API_BASE = 'http://localhost:8000/api/v1';
@@ -54,6 +55,8 @@ const initialState: ParserState = {
 
 // API functions
 async function validateGrammar(grammarText: string, startSymbol: string): Promise<GrammarValidationResponse> {
+  debug.api.request('POST', '/grammar/validate', { startSymbol, grammarLength: grammarText.length });
+  
   const response = await fetch(`${API_BASE}/grammar/validate`, {
     method: 'POST',
     headers: {
@@ -65,11 +68,16 @@ async function validateGrammar(grammarText: string, startSymbol: string): Promis
     }),
   });
   
+  debug.api.response('/grammar/validate', response.status);
+  
   if (!response.ok) {
     throw new Error(`Grammar validation failed: ${response.statusText}`);
   }
   
-  return response.json();
+  const result = await response.json();
+  debug.log('Grammar validation result', { valid: result.valid, errors: result.errors?.length });
+  
+  return result;
 }
 
 async function generateParsingTable(grammarText: string, startSymbol: string): Promise<ParsingTableResponse> {
@@ -129,6 +137,7 @@ export const useParserStore = create<ParserState & ParserActions>()(
       
       // Grammar actions
       setGrammarText: (text: string) => {
+        debug.store.action('setGrammarText', { textLength: text.length });
         set({ grammarText: text });
         // Auto-validate grammar when text changes
         const { validateGrammar } = get();
@@ -142,7 +151,10 @@ export const useParserStore = create<ParserState & ParserActions>()(
       validateGrammar: async () => {
         const { grammarText, startSymbol } = get();
         
+        debug.store.action('validateGrammar', { grammarLength: grammarText.length, startSymbol });
+        
         if (!grammarText.trim()) {
+          debug.log('Empty grammar text, skipping validation');
           set({
             grammarValid: false,
             grammarErrors: [],
