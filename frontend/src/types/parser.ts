@@ -79,6 +79,10 @@ export interface GrammarValidationResponse {
       items: string[];
       shift_symbols: string[];
       reduce_items: string[];
+      transitions: Array<{
+        to_state: number;
+        symbol: string;
+      }>;
     }>;
     sample_strings: string[];
     parsing_table_preview: {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import ReactFlow, {
   Node,
   Edge,
@@ -13,135 +13,145 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { useParserStore } from '../store/parserStore';
 
-interface AutomatonNode extends Node {
-  data: {
-    state: number;
-    items: string[];
-    isCurrent: boolean;
-    isHighlighted: boolean;
-  };
+interface AutomatonNodeData {
+  state: number;
+  items: string[];
+  isCurrent: boolean;
+  isHighlighted: boolean;
 }
 
-interface AutomatonEdge extends Edge {
-  data?: {
-    symbol: string;
-    isActive: boolean;
-    isHighlighted: boolean;
-  };
+interface AutomatonEdgeData {
+  symbol: string;
+  isActive: boolean;
+  isHighlighted: boolean;
 }
 
 export const AutomatonView: React.FC = () => {
-  const { 
-    currentStep, 
-    parsingSteps, 
-    automaton,
-    isGeneratingTable 
+  const {
+    currentStep,
+    parsingSteps,
+    grammarInfo,
+    isGeneratingTable
   } = useParserStore();
-  
+
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   useEffect(() => {
-    // This would be populated from the backend automaton data
-    // For now, we'll create a simple example
-    if (isGeneratingTable) return;
+    if (isGeneratingTable || !grammarInfo?.lr1_states) {
+      setNodes([]);
+      setEdges([]);
+      return;
+    }
 
-    // Example automaton nodes and edges
-    const exampleNodes: AutomatonNode[] = [
-      {
-        id: '0',
+    // Create nodes from LR(1) states data
+    const automatonNodes: Node<AutomatonNodeData>[] = grammarInfo.lr1_states.map((state, index) => {
+      // Calculate position using a simple grid layout
+      const cols = Math.ceil(Math.sqrt(grammarInfo.lr1_states.length));
+      const row = Math.floor(index / cols);
+      const col = index % cols;
+      const x = col * 250 + 50; // Smaller spacing
+      const y = row * 180 + 50; // Smaller spacing
+
+      return {
+        id: state.state_number.toString(),
         type: 'default',
-        position: { x: 100, y: 100 },
+        position: { x, y },
         data: {
-          state: 0,
-          items: ['[S\' → ·S, $]'],
-          isCurrent: currentStep === 0,
+          state: state.state_number,
+          items: state.items,
+          isCurrent: currentStep === state.state_number,
           isHighlighted: false,
         },
-      },
-      {
-        id: '1',
-        type: 'default',
-        position: { x: 300, y: 100 },
-        data: {
-          state: 1,
-          items: ['[S\' → S·, $]'],
-          isCurrent: currentStep === 1,
-          isHighlighted: false,
-        },
-      },
-      {
-        id: '2',
-        type: 'default',
-        position: { x: 200, y: 250 },
-        data: {
-          state: 2,
-          items: ['[S → ·E, $]', '[E → ·E + T, $]'],
-          isCurrent: currentStep === 2,
-          isHighlighted: false,
-        },
-      },
-    ];
+      };
+    });
 
-    const exampleEdges: AutomatonEdge[] = [
-      {
-        id: 'e0-1',
-        source: '0',
-        target: '1',
-        label: 'S',
-        data: {
-          symbol: 'S',
-          isActive: currentStep >= 1,
-          isHighlighted: currentStep === 1,
-        },
-      },
-      {
-        id: 'e0-2',
-        source: '0',
-        target: '2',
-        label: 'E',
-        data: {
-          symbol: 'E',
-          isActive: currentStep >= 2,
-          isHighlighted: currentStep === 2,
-        },
-      },
-    ];
+    // Create edges from transitions data
+    const automatonEdges: Edge<AutomatonEdgeData>[] = [];
 
-    setNodes(exampleNodes);
-    setEdges(exampleEdges);
-  }, [currentStep, isGeneratingTable]);
+    console.log('Creating edges from transitions:', grammarInfo.lr1_states);
+
+    grammarInfo.lr1_states.forEach((state) => {
+      console.log(`State ${state.state_number} has ${state.transitions?.length || 0} transitions:`, state.transitions);
+
+      // Check if transitions exist, otherwise create basic edges from shift symbols
+      if (state.transitions && state.transitions.length > 0) {
+        state.transitions.forEach((transition) => {
+          automatonEdges.push({
+            id: `e${state.state_number}-${transition.to_state}-${transition.symbol}`,
+            source: state.state_number.toString(),
+            target: transition.to_state.toString(),
+            label: transition.symbol,
+            data: {
+              symbol: transition.symbol,
+              isActive: false,
+              isHighlighted: false,
+            },
+          });
+        });
+      } else {
+        // Fallback: create basic transitions based on shift symbols
+        console.log(`No transitions for state ${state.state_number}, using shift symbols:`, state.shift_symbols);
+        state.shift_symbols.forEach((symbol, index) => {
+          const targetState = (state.state_number + 1) % grammarInfo.lr1_states.length;
+          if (targetState !== state.state_number) {
+            automatonEdges.push({
+              id: `e${state.state_number}-${targetState}-${symbol}`,
+              source: state.state_number.toString(),
+              target: targetState.toString(),
+              label: symbol,
+              data: {
+                symbol,
+                isActive: false,
+                isHighlighted: false,
+              },
+            });
+          }
+        });
+      }
+    });
+
+    console.log('Created edges:', automatonEdges);
+
+    setNodes(automatonNodes);
+    setEdges(automatonEdges);
+  }, [currentStep, isGeneratingTable, grammarInfo]);
 
   const onConnect = useCallback((params: Connection) => {
     setEdges((eds) => addEdge(params, eds));
   }, [setEdges]);
 
   const nodeTypes = {
-    default: ({ data }: { data: AutomatonNode['data'] }) => (
-      <div className={`px-4 py-2 bg-white border-2 rounded-lg shadow-sm min-w-[200px] ${
-        data.isCurrent 
-          ? 'border-primary-500 bg-primary-50 animate-pulse-glow' 
-          : 'border-gray-200 hover:border-gray-300'
-      }`}>
-        <div className="text-center mb-2">
-          <div className="text-lg font-bold text-gray-900">
-            State {data.state}
+    default: ({ data }: { data: AutomatonNodeData }) => (
+      <div className={`px-2 py-1 bg-white border-2 rounded shadow-sm min-w-[120px] max-w-[150px] ${data.isCurrent
+        ? 'border-blue-500 bg-blue-50'
+        : 'border-gray-200 hover:border-gray-300'
+        }`}>
+        <div className="text-center mb-1">
+          <div className="text-sm font-bold text-gray-900">
+            {data.state}
           </div>
         </div>
-        
-        <div className="space-y-1">
-          {data.items.map((item, index) => (
-            <div 
+
+        <div className="space-y-0.5">
+          {data.items.slice(0, 3).map((item, index) => (
+            <div
               key={index}
-              className="text-xs font-mono bg-gray-100 px-2 py-1 rounded text-gray-700"
+              className="text-xs font-mono bg-gray-100 px-1 py-0.5 rounded text-gray-700 truncate"
+              title={item}
             >
-              {item}
+              {item.length > 20 ? item.substring(0, 20) + '...' : item}
             </div>
           ))}
+          {data.items.length > 3 && (
+            <div className="text-xs text-gray-500 text-center">
+              +{data.items.length - 3} more
+            </div>
+          )}
         </div>
-        
+
         {data.isCurrent && (
-          <div className="absolute -top-2 -right-2 w-4 h-4 bg-primary-500 rounded-full animate-ping"></div>
+          <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-ping"></div>
         )}
       </div>
     ),
@@ -150,11 +160,16 @@ export const AutomatonView: React.FC = () => {
   const edgeOptions = {
     style: {
       strokeWidth: 2,
-      stroke: '#6b7280',
+      stroke: '#3b82f6',
     },
-    markerEnd: {
-      type: 'arrowclosed',
-      color: '#6b7280',
+    labelStyle: {
+      fontSize: 12,
+      fontWeight: 'bold',
+      fill: '#1f2937',
+    },
+    labelBgStyle: {
+      fill: '#ffffff',
+      fillOpacity: 0.8,
     },
   };
 

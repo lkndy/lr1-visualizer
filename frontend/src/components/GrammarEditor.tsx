@@ -13,8 +13,6 @@ export const GrammarEditor: React.FC = () => {
     grammarValid,
     grammarErrors,
     isValidatingGrammar,
-    generateParsingTable,
-    isGeneratingTable,
   } = useParserStore();
 
   const [showPreview, setShowPreview] = useState(false);
@@ -27,11 +25,6 @@ export const GrammarEditor: React.FC = () => {
     setStartSymbol(value);
   };
 
-  const handleGenerateTable = () => {
-    if (grammarValid) {
-      generateParsingTable();
-    }
-  };
 
   return (
     <div className="card p-6">
@@ -103,23 +96,15 @@ Use ε or empty for epsilon productions.`}
         ) : null}
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex space-x-3">
-        <button
-          onClick={handleGenerateTable}
-          disabled={!grammarValid || isGeneratingTable}
-          className="btn-primary flex items-center space-x-2"
-        >
-          {isGeneratingTable ? (
-            <>
-              <LoadingSpinner size="sm" />
-              <span>Generating...</span>
-            </>
-          ) : (
-            <span>Generate Parsing Table</span>
-          )}
-        </button>
-      </div>
+      {/* Status Message */}
+      {grammarValid && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+          <div className="flex items-center space-x-2 text-green-800">
+            <span>✅</span>
+            <span className="text-sm font-medium">Grammar validated and parsing table generated automatically</span>
+          </div>
+        </div>
+      )}
 
       {/* Grammar Preview */}
       {showPreview && grammarText.trim() && (

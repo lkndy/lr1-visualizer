@@ -178,6 +178,24 @@ export const useParserStore = create<ParserState & ParserActions>()(
             availableSampleStrings: response.grammar_info?.sample_strings || [],
             isValidatingGrammar: false,
           });
+
+          // If grammar is valid, also generate the parsing table automatically
+          if (response.valid && response.grammar_info?.parsing_table_preview) {
+            set({
+              actionTable: response.grammar_info.parsing_table_preview.action_table,
+              gotoTable: response.grammar_info.parsing_table_preview.goto_table,
+              tableSummary: {
+                num_states: response.grammar_info.num_states,
+                num_terminals: response.grammar_info.num_terminals,
+                num_non_terminals: response.grammar_info.num_non_terminals,
+                action_entries: 0, // Will be calculated from table
+                goto_entries: 0, // Will be calculated from table
+                has_conflicts: response.grammar_info.has_conflicts,
+                conflicts: response.grammar_info.conflict_summary,
+              },
+              tableConflicts: [], // Will be populated from conflicts
+            });
+          }
         } catch (error) {
           set({
             grammarValid: false,

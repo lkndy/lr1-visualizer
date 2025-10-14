@@ -127,6 +127,7 @@ async def validate_grammar(request: GrammarRequest) -> GrammarResponse:
                         "items": [],
                         "shift_symbols": [s.name for s in state.get_shift_symbols()],
                         "reduce_items": [],
+                        "transitions": [],
                     }
 
                     for item in state.items:
@@ -146,6 +147,15 @@ async def validate_grammar(request: GrammarRequest) -> GrammarResponse:
 
                         if item.is_reduce_item:
                             state_info["reduce_items"].append(item_str)
+
+                    # Add transitions from this state
+                    for transition in automaton.get_transitions_from_state(i):
+                        state_info["transitions"].append(
+                            {
+                                "to_state": transition.to_state,
+                                "symbol": transition.symbol.name,
+                            }
+                        )
 
                     lr1_states.append(state_info)
 
