@@ -1,0 +1,1 @@
+Scan for problems in the whole project and fix them

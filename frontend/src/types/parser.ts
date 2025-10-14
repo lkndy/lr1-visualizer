@@ -65,6 +65,32 @@ export interface GrammarValidationResponse {
     grammar_type: string;
     has_conflicts: boolean;
     conflict_summary: any;
+    terminals_list: Array<{ name: string; type: string }>;
+    non_terminals_list: Array<{ name: string; type: string }>;
+    productions_detailed: Array<{
+      lhs: string;
+      rhs: string[];
+      index: number;
+    }>;
+    first_sets: Record<string, string[]>;
+    follow_sets: Record<string, string[]>;
+    lr1_states: Array<{
+      state_number: number;
+      items: string[];
+      shift_symbols: string[];
+      reduce_items: string[];
+    }>;
+    sample_strings: string[];
+    parsing_table_preview: {
+      action_table: {
+        headers: string[];
+        rows: string[][];
+      };
+      goto_table: {
+        headers: string[];
+        rows: string[][];
+      };
+    };
   };
 }
 
@@ -113,7 +139,7 @@ export interface ExampleGrammar {
   description: string;
   grammar: string;
   start_symbol: string;
-  example_input: string;
+  sample_inputs: string[];
 }
 
 export interface ExampleGrammarsResponse {
@@ -128,29 +154,31 @@ export interface ParserState {
   grammarValid: boolean;
   grammarErrors: GrammarError[];
   grammarInfo?: GrammarValidationResponse['grammar_info'];
-  
+
   // Parsing table state
   actionTable?: ParsingTableResponse['action_table'];
   gotoTable?: ParsingTableResponse['goto_table'];
   tableSummary?: ParsingTableResponse['summary'];
   tableConflicts: ConflictInfo[];
-  
+
   // Parsing state
   inputString: string;
+  selectedSampleString: string;
+  availableSampleStrings: string[];
   currentStep: number;
   totalSteps: number;
   parsingSteps: ParsingStep[];
   ast?: ParsingResponse['ast'];
   parsingValid: boolean;
   parsingError?: string;
-  
+
   // UI state
   isPlaying: boolean;
   playSpeed: number;
   selectedExample?: string;
-  activeTab: 'grammar' | 'table' | 'automaton' | 'parse';
+  activeTab: 'grammar-config' | 'parsing-viz';
   showConflicts: boolean;
-  
+
   // Loading states
   isValidatingGrammar: boolean;
   isGeneratingTable: boolean;
@@ -162,12 +190,13 @@ export interface ParserActions {
   setGrammarText: (text: string) => void;
   setStartSymbol: (symbol: string) => void;
   validateGrammar: () => Promise<void>;
-  
+
   // Table actions
   generateParsingTable: () => Promise<void>;
-  
+
   // Parsing actions
   setInputString: (input: string) => void;
+  selectSampleString: (sample: string) => void;
   parseInput: () => Promise<void>;
   setCurrentStep: (step: number) => void;
   nextStep: () => void;
@@ -175,13 +204,13 @@ export interface ParserActions {
   play: () => void;
   pause: () => void;
   reset: () => void;
-  
+
   // UI actions
   setPlaySpeed: (speed: number) => void;
   selectExample: (example: string) => void;
   setActiveTab: (tab: ParserState['activeTab']) => void;
   setShowConflicts: (show: boolean) => void;
-  
+
   // Utility actions
   loadExample: (example: ExampleGrammar) => void;
   clearAll: () => void;
