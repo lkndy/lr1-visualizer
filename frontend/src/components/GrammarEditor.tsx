@@ -52,6 +52,8 @@ export const GrammarEditor: React.FC = () => {
           onChange={(e) => handleStartSymbolChange(e.target.value)}
           className="input-field max-w-xs"
           placeholder="S"
+          aria-label="Start symbol for the grammar"
+          aria-describedby="start-symbol-help"
         />
       </div>
 
@@ -75,6 +77,8 @@ F -> ( E ) | id | num
 Use -> or → for production rules.
 Use | for alternatives.
 Use ε or empty for epsilon productions.`}
+          aria-label="Grammar rules text area"
+          aria-describedby="grammar-help"
         />
       </div>
 
@@ -127,7 +131,7 @@ Use ε or empty for epsilon productions.`}
       )}
 
       {/* Grammar Help */}
-      <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <div id="grammar-help" className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h3 className="text-sm font-medium text-blue-800 mb-2">Grammar Syntax Help</h3>
         <ul className="text-sm text-blue-700 space-y-1">
           <li>• Use <code className="bg-blue-100 px-1 rounded">{'->'}</code> or <code className="bg-blue-100 px-1 rounded">→</code> for production rules</li>

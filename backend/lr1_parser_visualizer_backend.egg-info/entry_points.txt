@@ -1,0 +1,2 @@
+[console_scripts]
+lr1-debug = debug.cli:main

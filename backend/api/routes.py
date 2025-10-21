@@ -6,10 +6,10 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from parser import Automaton, ParserEngine, ParsingTable
-from parser.lark_grammar import parse_grammar_with_lark
+from parser.lark_grammar_v2 import parse_grammar_with_lark_v2
 from parser.sample_generator import generate_sample_strings
 from pydantic import BaseModel
-from utils.debug import error_log, info_log, log_api_request
+from debug.logger import get_logger, log_api_request, log_api_response
 
 
 # Request/Response models
@@ -55,8 +55,32 @@ class TableResponse(BaseModel):
     conflicts: list[dict[str, Any]]
 
 
+class InteractiveDerivationRequest(BaseModel):
+    """Request model for interactive string derivation."""
+
+    grammar_text: str
+    input_string: str
+    start_symbol: str = "S"
+
+
+class InteractiveDerivationResponse(BaseModel):
+    """Response model for interactive string derivation."""
+
+    valid: bool
+    error: str | None = None
+    input_string: str
+    tokens: list[str]
+    total_steps: int
+    success: bool
+    steps: list[dict[str, Any]]
+    summary: dict[str, Any]
+
+
 # Create router
 router = APIRouter(prefix="/api/v1", tags=["parser"])
+
+# Get logger
+logger = get_logger(__name__)
 
 
 def _raise_grammar_validation_error(errors: list) -> None:
@@ -82,7 +106,7 @@ async def validate_grammar(request: GrammarRequest) -> GrammarResponse:
 
     try:
         # Parse grammar using Lark
-        grammar, lark_errors = parse_grammar_with_lark(request.grammar_text, request.start_symbol)
+        grammar, lark_errors = parse_grammar_with_lark_v2(request.grammar_text, request.start_symbol)
 
         # Validate grammar
         validation_errors = grammar.validate()
@@ -102,7 +126,7 @@ async def validate_grammar(request: GrammarRequest) -> GrammarResponse:
         if not errors:
             # Grammar is valid, build automaton and table
             try:
-                info_log("🧩 Building automaton and parsing table")
+                logger.info("Building automaton and parsing table")
                 automaton = Automaton(grammar)
                 parsing_table = ParsingTable(automaton)
 
@@ -183,13 +207,13 @@ async def validate_grammar(request: GrammarRequest) -> GrammarResponse:
                     },
                 }
 
-                info_log("✅ Automaton and table built", grammar_info)
+                logger.info("Automaton and table built successfully")
 
                 return GrammarResponse(valid=True, errors=[], grammar_info=grammar_info)
 
             except Exception as e:
                 tb = traceback.format_exc()
-                error_log("💥 Automaton/table build failed", {"error": str(e), "trace": tb})
+                logger.error(f"Automaton/table build failed: {e}", extra={"trace": tb})
                 return GrammarResponse(
                     valid=False,
                     errors=[
@@ -223,7 +247,7 @@ async def get_parsing_table(request: GrammarRequest) -> TableResponse:
     """Generate parsing table for a grammar."""
     try:
         # Parse grammar using Lark
-        grammar, lark_errors = parse_grammar_with_lark(request.grammar_text, request.start_symbol)
+        grammar, lark_errors = parse_grammar_with_lark_v2(request.grammar_text, request.start_symbol)
         validation_errors = grammar.validate()
         errors = lark_errors + validation_errors
 
@@ -232,14 +256,11 @@ async def get_parsing_table(request: GrammarRequest) -> TableResponse:
 
         # Build automaton and parsing table
         try:
-            info_log("🧩 Building automaton and parsing table (table endpoint)")
+            logger.info("Building automaton and parsing table (table endpoint)")
             automaton = Automaton(grammar)
             parsing_table = ParsingTable(automaton)
         except Exception as e:
-            error_log(
-                "💥 Table build failed",
-                {"error": str(e), "trace": traceback.format_exc()},
-            )
+            logger.error(f"Table build failed: {e}", extra={"trace": traceback.format_exc()})
             raise
 
         # Convert conflicts to dict format
@@ -263,10 +284,7 @@ async def get_parsing_table(request: GrammarRequest) -> TableResponse:
     except HTTPException:
         raise
     except Exception as e:
-        error_log(
-            "💥 /parser/table failed",
-            {"error": str(e), "trace": traceback.format_exc()},
-        )
+        logger.error(f"/parser/table failed: {e}", extra={"trace": traceback.format_exc()})
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -275,7 +293,7 @@ async def parse_input(request: ParsingRequest) -> ParsingResponse:
     """Parse input string using the given grammar."""
     try:
         # Parse grammar using Lark
-        grammar, lark_errors = parse_grammar_with_lark(request.grammar_text, request.start_symbol)
+        grammar, lark_errors = parse_grammar_with_lark_v2(request.grammar_text, request.start_symbol)
         validation_errors = grammar.validate()
         errors = lark_errors + validation_errors
 
@@ -284,14 +302,11 @@ async def parse_input(request: ParsingRequest) -> ParsingResponse:
 
         # Build automaton and parsing table
         try:
-            info_log("🧩 Building automaton and parsing table (parse endpoint)")
+            logger.info("Building automaton and parsing table (parse endpoint)")
             automaton = Automaton(grammar)
             parsing_table = ParsingTable(automaton)
         except Exception as e:
-            error_log(
-                "💥 Parse build failed",
-                {"error": str(e), "trace": traceback.format_exc()},
-            )
+            logger.error(f"Parse build failed: {e}", extra={"trace": traceback.format_exc()})
             raise
 
         if parsing_table.has_conflicts():
@@ -314,10 +329,7 @@ async def parse_input(request: ParsingRequest) -> ParsingResponse:
     except HTTPException:
         raise
     except Exception as e:
-        error_log(
-            "💥 /parser/parse failed",
-            {"error": str(e), "trace": traceback.format_exc()},
-        )
+        logger.error(f"/parser/parse failed: {e}", extra={"trace": traceback.format_exc()})
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -394,6 +406,91 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+
+@router.post("/parse/interactive", response_model=InteractiveDerivationResponse)
+async def parse_interactive_derivation(request: InteractiveDerivationRequest) -> InteractiveDerivationResponse:
+    """Parse input string with detailed interactive derivation steps."""
+    log_api_request("parse_interactive_derivation", request.model_dump())
+
+    try:
+        # Parse grammar
+        grammar, errors = parse_grammar_with_lark_v2(request.grammar_text, request.start_symbol)
+
+        if errors:
+            return InteractiveDerivationResponse(
+                valid=False,
+                error=f"Grammar parsing failed: {errors[0].message}",
+                input_string=request.input_string,
+                tokens=[],
+                total_steps=0,
+                success=False,
+                steps=[],
+                summary={"error": "Grammar parsing failed"},
+            )
+
+        # Create automaton and parsing table
+        automaton = Automaton(grammar)
+        table = ParsingTable(automaton)
+
+        if table.has_conflicts():
+            return InteractiveDerivationResponse(
+                valid=False,
+                error="Grammar has conflicts and cannot be parsed",
+                input_string=request.input_string,
+                tokens=[],
+                total_steps=0,
+                success=False,
+                steps=[],
+                summary={"error": "Grammar has conflicts"},
+            )
+
+        # Create parser engine
+        engine = ParserEngine(grammar, table)
+
+        # Parse with interactive derivation
+        derivation_info = engine.parse_interactive(request.input_string)
+
+        # Create summary
+        summary = {
+            "total_steps": derivation_info["total_steps"],
+            "success": derivation_info["success"],
+            "grammar_type": automaton.get_grammar_type(),
+            "num_states": len(automaton.states),
+            "num_productions": len(grammar.productions),
+        }
+
+        response = InteractiveDerivationResponse(
+            valid=True,
+            error=None,
+            input_string=derivation_info["input_string"],
+            tokens=derivation_info["tokens"],
+            total_steps=derivation_info["total_steps"],
+            success=derivation_info["success"],
+            steps=derivation_info["steps"],
+            summary=summary,
+        )
+
+        log_api_response("parse_interactive_derivation", 200, response.model_dump())
+        return response
+
+    except Exception as e:
+        error_msg = f"Interactive parsing failed: {str(e)}"
+        logger.error(f"Interactive parsing error: {error_msg}\n{traceback.format_exc()}")
+
+        response = InteractiveDerivationResponse(
+            valid=False,
+            error=error_msg,
+            input_string=request.input_string,
+            tokens=[],
+            total_steps=0,
+            success=False,
+            steps=[],
+            summary={"error": error_msg},
+        )
+
+        log_api_response("parse_interactive_derivation", 200, response.model_dump())
+        return response
 
 
 @router.websocket("/ws/parse")

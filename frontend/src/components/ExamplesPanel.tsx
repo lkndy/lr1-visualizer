@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Play } from 'lucide-react';
-import { useParserStore, getExampleGrammars } from '../store/parserStore';
+import { useParserStore } from '../store/parserStore';
+import { getExampleGrammars } from '../api/client';
 import { ExampleGrammar } from '../types/parser';
 
 export const ExamplesPanel: React.FC = () => {
@@ -73,12 +74,19 @@ export const ExamplesPanel: React.FC = () => {
                   <div className="flex-1">
                     <h4 className="font-medium text-gray-900 mb-1">{example.name}</h4>
                     <p className="text-sm text-gray-600 mb-3">{example.description}</p>
-                    
+
                     <div className="bg-gray-50 rounded p-3 mb-3">
-                      <div className="text-xs text-gray-500 mb-1">Example Input:</div>
-                      <code className="text-sm font-mono text-gray-800">{example.example_input}</code>
+                      <div className="text-xs text-gray-500 mb-1">Sample Inputs:</div>
+                      <div className="space-y-1">
+                        {example.sample_inputs.slice(0, 2).map((input, idx) => (
+                          <code key={idx} className="text-sm font-mono text-gray-800 block">{input}</code>
+                        ))}
+                        {example.sample_inputs.length > 2 && (
+                          <div className="text-xs text-gray-500">+{example.sample_inputs.length - 2} more...</div>
+                        )}
+                      </div>
                     </div>
-                    
+
                     <div className="bg-gray-900 rounded p-3">
                       <div className="text-xs text-gray-400 mb-1">Grammar:</div>
                       <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">
@@ -86,7 +94,7 @@ export const ExamplesPanel: React.FC = () => {
                       </pre>
                     </div>
                   </div>
-                  
+
                   <button
                     onClick={() => handleLoadExample(example)}
                     className="ml-4 btn-primary flex items-center space-x-1 text-sm"

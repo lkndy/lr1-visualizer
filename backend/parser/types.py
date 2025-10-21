@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SymbolType(Enum):
@@ -70,10 +70,7 @@ class ParsingAction(BaseModel):
     action_type: ActionType
     target: int | None = None  # State number for shift, production index for reduce
 
-    class Config:
-        """Pydantic configuration for ParsingAction."""
-
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class ParsingStep(BaseModel):
@@ -88,13 +85,15 @@ class ParsingStep(BaseModel):
     ast_nodes: list[dict[str, Any]] = []
 
 
-class GrammarError(BaseModel):
+class GrammarError(Exception):
     """Represents a grammar validation error."""
 
-    error_type: str
-    message: str
-    line_number: int | None = None
-    symbol: str | None = None
+    def __init__(self, error_type: str, message: str, line_number: int | None = None, symbol: str | None = None):
+        super().__init__(message)
+        self.error_type = error_type
+        self.message = message
+        self.line_number = line_number
+        self.symbol = symbol
 
 
 class ConflictInfo(BaseModel):
@@ -116,7 +115,4 @@ class ASTNode(BaseModel):
     parent: str | None = None  # ID of parent node
     production_used: int | None = None  # Index of production used to create this node
 
-    class Config:
-        """Pydantic configuration for ASTNode."""
-
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)

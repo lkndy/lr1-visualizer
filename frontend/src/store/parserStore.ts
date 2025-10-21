@@ -9,12 +9,11 @@ import {
   ParsingTableResponse,
   ParsingResponse,
   ExampleGrammar,
-  ExampleGrammarsResponse
+  ExampleGrammarsResponse,
+  InteractiveDerivationStep
 } from '../types/parser';
+import { validateGrammar, parseInteractive, getExampleGrammars, APIError } from '../api/client';
 import debug from '../utils/debug';
-
-// API base URL
-const API_BASE = 'http://localhost:8000/api/v1';
 
 // Initial state
 const initialState: ParserState = {
@@ -31,7 +30,7 @@ const initialState: ParserState = {
   tableSummary: undefined,
   tableConflicts: [],
 
-  // Parsing state
+  // Parsing state - UPDATED for interactive derivation
   inputString: '',
   selectedSampleString: '',
   availableSampleStrings: [],
@@ -41,6 +40,12 @@ const initialState: ParserState = {
   ast: undefined,
   parsingValid: false,
   parsingError: undefined,
+
+  // NEW: Interactive derivation fields
+  tokens: [],
+  currentToken: null,
+  derivationProgress: '',
+  currentStateInAutomaton: null,
 
   // UI state
   isPlaying: false,
@@ -55,81 +60,7 @@ const initialState: ParserState = {
   isParsing: false,
 };
 
-// API functions
-async function validateGrammar(grammarText: string, startSymbol: string): Promise<GrammarValidationResponse> {
-  debug.api.request('POST', '/grammar/validate', { startSymbol, grammarLength: grammarText.length });
-
-  const response = await fetch(`${API_BASE}/grammar/validate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      grammar_text: grammarText,
-      start_symbol: startSymbol,
-    }),
-  });
-
-  debug.api.response('/grammar/validate', response.status);
-
-  if (!response.ok) {
-    throw new Error(`Grammar validation failed: ${response.statusText}`);
-  }
-
-  const result = await response.json();
-  debug.log('Grammar validation result', { valid: result.valid, errors: result.errors?.length });
-
-  return result;
-}
-
-async function generateParsingTable(grammarText: string, startSymbol: string): Promise<ParsingTableResponse> {
-  const response = await fetch(`${API_BASE}/parser/table`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      grammar_text: grammarText,
-      start_symbol: startSymbol,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Table generation failed: ${response.statusText}`);
-  }
-
-  return response.json();
-}
-
-async function parseInput(grammarText: string, inputString: string, startSymbol: string): Promise<ParsingResponse> {
-  const response = await fetch(`${API_BASE}/parser/parse`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      grammar_text: grammarText,
-      input_string: inputString,
-      start_symbol: startSymbol,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Parsing failed: ${response.statusText}`);
-  }
-
-  return response.json();
-}
-
-async function getExampleGrammars(): Promise<ExampleGrammarsResponse> {
-  const response = await fetch(`${API_BASE}/examples`);
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch examples: ${response.statusText}`);
-  }
-
-  return response.json();
-}
+// API functions are now imported from api/client.ts
 
 // Store definition
 export const useParserStore = create<ParserState & ParserActions>()(
@@ -179,7 +110,7 @@ export const useParserStore = create<ParserState & ParserActions>()(
             isValidatingGrammar: false,
           });
 
-          // If grammar is valid, also generate the parsing table automatically
+          // If grammar is valid, store the parsing table from the enhanced response
           if (response.valid && response.grammar_info?.parsing_table_preview) {
             set({
               actionTable: response.grammar_info.parsing_table_preview.action_table,
@@ -197,11 +128,17 @@ export const useParserStore = create<ParserState & ParserActions>()(
             });
           }
         } catch (error) {
+          const errorMessage = error instanceof APIError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : 'Unknown error';
+
           set({
             grammarValid: false,
             grammarErrors: [{
               type: 'api_error',
-              message: error instanceof Error ? error.message : 'Unknown error',
+              message: errorMessage,
             }],
             grammarInfo: undefined,
             isValidatingGrammar: false,
@@ -209,35 +146,10 @@ export const useParserStore = create<ParserState & ParserActions>()(
         }
       },
 
-      // Table actions
+      // Table actions - DEPRECATED: Table data now comes from grammar validation
       generateParsingTable: async () => {
-        const { grammarText, startSymbol, grammarValid } = get();
-
-        if (!grammarValid || !grammarText.trim()) {
-          return;
-        }
-
-        set({ isGeneratingTable: true });
-
-        try {
-          const response = await generateParsingTable(grammarText, startSymbol);
-
-          set({
-            actionTable: response.action_table,
-            gotoTable: response.goto_table,
-            tableSummary: response.summary,
-            tableConflicts: response.conflicts,
-            isGeneratingTable: false,
-          });
-        } catch (error) {
-          set({
-            actionTable: undefined,
-            gotoTable: undefined,
-            tableSummary: undefined,
-            tableConflicts: [],
-            isGeneratingTable: false,
-          });
-        }
+        console.warn('generateParsingTable is deprecated - table data is now included in grammar validation response');
+        // Table data is automatically populated when grammar is validated
       },
 
       // Parsing actions
@@ -262,47 +174,83 @@ export const useParserStore = create<ParserState & ParserActions>()(
         set({ isParsing: true });
 
         try {
-          const response = await parseInput(grammarText, inputString, startSymbol);
+          const response = await parseInteractive(grammarText, inputString, startSymbol);
 
+          // Update parsing state with new interactive derivation data
           set({
             parsingSteps: response.steps,
-            totalSteps: response.steps.length,
+            totalSteps: response.total_steps,
             currentStep: 0,
-            ast: response.ast,
-            parsingValid: response.valid,
+            ast: undefined, // AST is now embedded in steps
+            parsingValid: response.success,
             parsingError: response.error,
+            tokens: response.tokens,
+            currentToken: response.steps[0]?.current_token || null,
+            derivationProgress: response.steps[0]?.derivation_so_far || '',
+            currentStateInAutomaton: response.steps[0]?.stack[response.steps[0].stack.length - 1]?.[0] || null,
             isParsing: false,
           });
         } catch (error) {
+          const errorMessage = error instanceof APIError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : 'Unknown error';
+
           set({
             parsingSteps: [],
             totalSteps: 0,
             currentStep: 0,
             ast: undefined,
             parsingValid: false,
-            parsingError: error instanceof Error ? error.message : 'Unknown error',
+            parsingError: errorMessage,
+            tokens: [],
+            currentToken: null,
+            derivationProgress: '',
+            currentStateInAutomaton: null,
             isParsing: false,
           });
         }
       },
 
       setCurrentStep: (step: number) => {
-        const { totalSteps } = get();
+        const { totalSteps, parsingSteps } = get();
         const clampedStep = Math.max(0, Math.min(step, totalSteps - 1));
-        set({ currentStep: clampedStep });
+        const stepData = parsingSteps[clampedStep];
+
+        set({
+          currentStep: clampedStep,
+          currentToken: stepData?.current_token || null,
+          derivationProgress: stepData?.derivation_so_far || '',
+          currentStateInAutomaton: stepData?.stack[stepData.stack.length - 1]?.[0] || null,
+        });
       },
 
       nextStep: () => {
-        const { currentStep, totalSteps } = get();
+        const { currentStep, totalSteps, parsingSteps } = get();
         if (currentStep < totalSteps - 1) {
-          set({ currentStep: currentStep + 1 });
+          const newStep = currentStep + 1;
+          const stepData = parsingSteps[newStep];
+          set({
+            currentStep: newStep,
+            currentToken: stepData?.current_token || null,
+            derivationProgress: stepData?.derivation_so_far || '',
+            currentStateInAutomaton: stepData?.stack[stepData.stack.length - 1]?.[0] || null,
+          });
         }
       },
 
       previousStep: () => {
-        const { currentStep } = get();
+        const { currentStep, parsingSteps } = get();
         if (currentStep > 0) {
-          set({ currentStep: currentStep - 1 });
+          const newStep = currentStep - 1;
+          const stepData = parsingSteps[newStep];
+          set({
+            currentStep: newStep,
+            currentToken: stepData?.current_token || null,
+            derivationProgress: stepData?.derivation_so_far || '',
+            currentStateInAutomaton: stepData?.stack[stepData.stack.length - 1]?.[0] || null,
+          });
         }
       },
 
@@ -323,7 +271,28 @@ export const useParserStore = create<ParserState & ParserActions>()(
           ast: undefined,
           parsingValid: false,
           parsingError: undefined,
+          tokens: [],
+          currentToken: null,
+          derivationProgress: '',
+          currentStateInAutomaton: null,
         });
+      },
+
+      // NEW: Computed selectors for interactive derivation
+      getCurrentStepData: () => {
+        const { parsingSteps, currentStep } = get();
+        return parsingSteps[currentStep] || null;
+      },
+
+      getCurrentState: () => {
+        const stepData = get().getCurrentStepData();
+        if (!stepData || stepData.stack.length === 0) return null;
+        return stepData.stack[stepData.stack.length - 1][0]; // Top of stack state
+      },
+
+      getCurrentAction: () => {
+        const stepData = get().getCurrentStepData();
+        return stepData?.action || null;
       },
 
       // UI actions
@@ -373,5 +342,4 @@ export const useParserStore = create<ParserState & ParserActions>()(
   )
 );
 
-// Export API functions for external use
-export { validateGrammar, generateParsingTable, parseInput, getExampleGrammars };
+// API functions are now exported from api/client.ts

@@ -1,9 +1,9 @@
 import React from 'react';
-import { 
-  Play, 
-  Pause, 
-  SkipBack, 
-  SkipForward, 
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
   RotateCcw,
   ChevronLeft,
   ChevronRight,
@@ -87,7 +87,7 @@ export const StepControls: React.FC = () => {
           <ChevronLeft className="w-4 h-4" />
           <span>Previous</span>
         </button>
-        
+
         <button
           onClick={handleStepForward}
           disabled={currentStep >= totalSteps - 1 || totalSteps === 0}
@@ -117,7 +117,7 @@ export const StepControls: React.FC = () => {
             </>
           )}
         </button>
-        
+
         <button
           onClick={handleReset}
           disabled={totalSteps === 0}
@@ -138,7 +138,7 @@ export const StepControls: React.FC = () => {
             </label>
             <span className="text-sm text-gray-600">{playSpeed}x</span>
           </div>
-          
+
           <input
             type="range"
             min="0.1"
@@ -148,7 +148,7 @@ export const StepControls: React.FC = () => {
             onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
           />
-          
+
           <div className="flex justify-between text-xs text-gray-500 mt-1">
             <span>0.1x</span>
             <span>3.0x</span>
@@ -161,12 +161,12 @@ export const StepControls: React.FC = () => {
         <div className="mt-6 pt-6 border-t border-gray-200">
           <div className="text-sm text-gray-600 mb-2">Current Action:</div>
           <div className="font-medium text-gray-900">
-            {parsingSteps[currentStep]?.action.action_type.toUpperCase()}
-            {parsingSteps[currentStep]?.action.target !== undefined && 
+            {parsingSteps[currentStep]?.action?.type?.toUpperCase() || 'UNKNOWN'}
+            {parsingSteps[currentStep]?.action?.target !== undefined &&
               ` ${parsingSteps[currentStep].action.target}`
             }
           </div>
-          
+
           {parsingSteps[currentStep]?.current_token && (
             <div className="mt-2">
               <div className="text-sm text-gray-600 mb-1">Token:</div>

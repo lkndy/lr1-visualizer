@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParserStore } from '../store/parserStore';
 
@@ -11,7 +11,14 @@ interface StackItem {
 }
 
 export const StackVisualizer: React.FC = () => {
-  const { currentStep, parsingSteps } = useParserStore();
+  const {
+    currentStep,
+    parsingSteps,
+    tokens,
+    currentToken,
+    derivationProgress,
+    getCurrentStepData
+  } = useParserStore();
   const [stackItems, setStackItems] = useState<StackItem[]>([]);
   const [animationKey, setAnimationKey] = useState(0);
 
@@ -65,12 +72,15 @@ export const StackVisualizer: React.FC = () => {
     setAnimationKey(prev => prev + 1);
   }, [currentStep, parsingSteps]);
 
-  const getActionType = () => {
-    if (parsingSteps.length === 0 || currentStep >= parsingSteps.length) return null;
-    return parsingSteps[currentStep].action.action_type;
-  };
+  const currentStepData = getCurrentStepData();
 
-  const actionType = getActionType();
+  const actionType = useMemo(() => {
+    return currentStepData?.action?.type || null;
+  }, [currentStepData]);
+
+  const inputRemaining = useMemo(() => {
+    return currentStepData?.input_remaining || [];
+  }, [currentStepData]);
 
   return (
     <div className="card p-6">
@@ -84,12 +94,11 @@ export const StackVisualizer: React.FC = () => {
       {/* Action Indicator */}
       {actionType && (
         <div className="mb-4">
-          <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-            actionType === 'shift' ? 'bg-blue-100 text-blue-800' :
+          <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${actionType === 'shift' ? 'bg-blue-100 text-blue-800' :
             actionType === 'reduce' ? 'bg-green-100 text-green-800' :
-            actionType === 'accept' ? 'bg-yellow-100 text-yellow-800' :
-            'bg-red-100 text-red-800'
-          }`}>
+              actionType === 'accept' ? 'bg-yellow-100 text-yellow-800' :
+                'bg-red-100 text-red-800'
+            }`}>
             {actionType.toUpperCase()}
           </div>
         </div>
@@ -102,30 +111,29 @@ export const StackVisualizer: React.FC = () => {
             {stackItems.map((item, index) => (
               <motion.div
                 key={`${item.id}-${animationKey}`}
-                initial={{ 
+                initial={{
                   opacity: item.isNew ? 0 : 1,
                   y: item.isNew ? -20 : 0,
                   scale: item.isNew ? 0.9 : 1
                 }}
-                animate={{ 
+                animate={{
                   opacity: 1,
                   y: 0,
                   scale: 1
                 }}
-                exit={{ 
+                exit={{
                   opacity: 0,
                   y: -20,
                   scale: 0.9
                 }}
-                transition={{ 
+                transition={{
                   duration: 0.3,
                   ease: "easeOut"
                 }}
-                className={`flex items-center justify-between p-3 bg-white rounded-lg border-2 transition-all duration-200 ${
-                  item.isNew 
-                    ? 'border-primary-300 bg-primary-50 animate-pulse-glow' 
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
+                className={`flex items-center justify-between p-3 bg-white rounded-lg border-2 transition-all duration-200 ${item.isNew
+                  ? 'border-primary-300 bg-primary-50 animate-pulse-glow'
+                  : 'border-gray-200 hover:border-gray-300'
+                  }`}
               >
                 <div className="flex items-center space-x-3">
                   <div className="flex items-center justify-center w-8 h-8 bg-gray-100 rounded-full text-sm font-medium text-gray-600">
@@ -140,7 +148,7 @@ export const StackVisualizer: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                
+
                 {item.isNew && (
                   <motion.div
                     initial={{ scale: 0 }}
@@ -166,6 +174,45 @@ export const StackVisualizer: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Input Tokens Display */}
+      {tokens.length > 0 && (
+        <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+          <div className="text-sm text-gray-600 mb-2">Input Tokens:</div>
+          <div className="flex flex-wrap gap-1">
+            {tokens.map((token, index) => {
+              const isProcessed = index < tokens.length - (inputRemaining?.length || 0);
+              const isCurrent = token === currentToken;
+              return (
+                <span
+                  key={index}
+                  className={`px-2 py-1 rounded text-sm font-mono ${isCurrent
+                    ? 'bg-yellow-200 border-2 border-yellow-500 font-bold'
+                    : isProcessed
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-gray-200 text-gray-600'
+                    }`}
+                >
+                  {token}
+                </span>
+              );
+            })}
+          </div>
+          {currentToken && (
+            <div className="text-sm text-yellow-700 mt-2">
+              <strong>Current Token:</strong> {currentToken}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Derivation Progress */}
+      {derivationProgress && (
+        <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+          <div className="text-sm text-purple-600 mb-1">Derivation Progress:</div>
+          <div className="font-mono text-lg text-purple-900">{derivationProgress}</div>
+        </div>
+      )}
 
       {/* Stack Info */}
       {stackItems.length > 0 && (

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
 import { useParserStore } from '../store/parserStore';
-import { LoadingSpinner } from './LoadingSpinner';
+import { LoadingSpinner, SkeletonTable } from './LoadingSpinner';
 
 export const ParsingTable: React.FC = () => {
   const {
@@ -12,58 +12,82 @@ export const ParsingTable: React.FC = () => {
     showConflicts,
     setShowConflicts,
     isGeneratingTable,
-    currentStep,
-    parsingSteps,
+    getCurrentStepData,
+    getCurrentState,
+    getCurrentAction,
   } = useParserStore();
 
   const [activeTable, setActiveTable] = useState<'action' | 'goto'>('action');
+  const [hoveredCell, setHoveredCell] = useState<{ row: number, col: number, table: 'action' | 'goto' } | null>(null);
 
-  const currentStepData = parsingSteps[currentStep];
-  const currentState = currentStepData?.stack[currentStepData.stack.length - 1]?.[0];
+  // Use computed selectors for current state and action
+  const currentStepData = getCurrentStepData();
+  const currentState = getCurrentState();
+  const currentAction = getCurrentAction();
   const currentToken = currentStepData?.current_token;
 
-  const getCellClassName = (rowIndex: number, colIndex: number, tableType: 'action' | 'goto') => {
-    let className = '';
-    
+  const getCellClassName = useCallback((rowIndex: number, colIndex: number, tableType: 'action' | 'goto') => {
+    let className = 'px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-200 transition-all duration-200 ';
+
     if (tableType === 'action' && activeTable === 'action') {
       // Check if this cell corresponds to current state and token
       if (rowIndex > 0 && colIndex > 0) {
         const state = rowIndex - 1; // Adjust for header row
         const symbol = actionTable?.headers[colIndex];
-        
+
+        // Highlight current action cell with enhanced styling
         if (state === currentState && symbol === currentToken) {
-          className += ' cell-highlighted ';
+          className += 'bg-yellow-200 border-2 border-yellow-500 font-bold text-yellow-900 animate-pulse-glow shadow-lg ';
         }
-        
-        // Add action-specific styling
+
+        // Add action-specific styling with enhanced colors
         const cellValue = actionTable?.rows[rowIndex]?.[colIndex];
         if (cellValue) {
           if (cellValue.startsWith('s')) {
-            className += ' action-shift ';
+            className += 'bg-blue-100 text-blue-800 hover:bg-blue-200 ';
           } else if (cellValue.startsWith('r')) {
-            className += ' action-reduce ';
+            className += 'bg-green-100 text-green-800 hover:bg-green-200 ';
           } else if (cellValue === 'acc') {
-            className += ' action-accept ';
+            className += 'bg-purple-100 text-purple-800 hover:bg-purple-200 ';
           } else if (cellValue === '') {
-            className += ' action-error ';
+            className += 'bg-red-100 text-red-800 hover:bg-red-200 ';
           }
+        } else {
+          className += 'bg-gray-50 text-gray-400 hover:bg-gray-100 ';
+        }
+      }
+    } else if (tableType === 'goto' && activeTable === 'goto') {
+      // Similar logic for goto table
+      if (rowIndex > 0 && colIndex > 0) {
+        const state = rowIndex - 1;
+        const symbol = gotoTable?.headers[colIndex];
+
+        if (state === currentState && symbol === currentToken) {
+          className += 'bg-yellow-200 border-2 border-yellow-500 font-bold text-yellow-900 animate-pulse-glow shadow-lg ';
+        }
+
+        const cellValue = gotoTable?.rows[rowIndex]?.[colIndex];
+        if (cellValue) {
+          className += 'bg-indigo-100 text-indigo-800 hover:bg-indigo-200 ';
+        } else {
+          className += 'bg-gray-50 text-gray-400 hover:bg-gray-100 ';
         }
       }
     }
-    
-    return className;
-  };
 
-  const renderTable = (table: typeof actionTable | typeof gotoTable, type: 'action' | 'goto') => {
+    return className;
+  }, [activeTable, currentState, currentToken, actionTable, gotoTable]);
+
+  const renderTable = useCallback((table: typeof actionTable | typeof gotoTable, type: 'action' | 'goto') => {
     if (!table) return null;
 
     return (
       <div className="overflow-x-auto">
-        <table className="parsing-table">
+        <table className="parsing-table" role="table" aria-label={`${type} parsing table`}>
           <thead>
             <tr>
               {table.headers.map((header, index) => (
-                <th key={index} className={index === 0 ? 'state-header' : ''}>
+                <th key={index} className={index === 0 ? 'state-header' : ''} scope="col">
                   {header}
                 </th>
               ))}
@@ -76,6 +100,17 @@ export const ParsingTable: React.FC = () => {
                   <td
                     key={colIndex}
                     className={getCellClassName(rowIndex, colIndex, type)}
+                    title={
+                      rowIndex > 0 && colIndex > 0 &&
+                        (rowIndex - 1) === currentState &&
+                        table.headers[colIndex] === currentToken
+                        ? currentAction?.description || 'Current action'
+                        : undefined
+                    }
+                    onMouseEnter={() => setHoveredCell({ row: rowIndex, col: colIndex, table: type })}
+                    onMouseLeave={() => setHoveredCell(null)}
+                    role="gridcell"
+                    aria-label={`State ${rowIndex - 1}, Symbol ${table.headers[colIndex]}, Value: ${cell || 'empty'}`}
                   >
                     {cell || '-'}
                   </td>
@@ -86,13 +121,15 @@ export const ParsingTable: React.FC = () => {
         </table>
       </div>
     );
-  };
+  }, [getCellClassName, hoveredCell, currentAction, currentState, currentToken, setHoveredCell]);
 
   if (isGeneratingTable) {
     return (
-      <div className="card p-6 text-center">
-        <LoadingSpinner />
-        <p className="mt-4 text-gray-600">Generating parsing table...</p>
+      <div className="space-y-6">
+        <div className="card p-6 text-center">
+          <LoadingSpinner size="lg" text="Generating parsing table..." />
+        </div>
+        <SkeletonTable rows={8} cols={6} />
       </div>
     );
   }
@@ -136,7 +173,7 @@ export const ParsingTable: React.FC = () => {
             </div>
             <div className="bg-orange-50 p-4 rounded-lg">
               <div className="text-2xl font-bold text-orange-600">
-                {tableSummary.conflicts.total_conflicts}
+                {tableSummary.conflicts?.total_conflicts || 0}
               </div>
               <div className="text-sm text-orange-600">Conflicts</div>
             </div>
@@ -161,7 +198,7 @@ export const ParsingTable: React.FC = () => {
                   {showConflicts ? 'Hide' : 'Show'} Details
                 </button>
               </div>
-              
+
               {showConflicts && (
                 <div className="mt-3 space-y-2">
                   {tableConflicts.map((conflict, index) => (
@@ -183,6 +220,21 @@ export const ParsingTable: React.FC = () => {
         </div>
       )}
 
+      {/* Current Action Status */}
+      {currentAction && currentState !== null && currentToken && (
+        <div className="card p-4 bg-yellow-50 border border-yellow-200">
+          <div className="flex items-center space-x-2">
+            <Info className="w-4 h-4 text-yellow-600" />
+            <span className="text-sm text-yellow-800">
+              <strong>Current Action:</strong> {currentAction?.description || 'No action description'}
+            </span>
+          </div>
+          <div className="text-xs text-yellow-700 mt-1">
+            State {currentState} × Token '{currentToken}'
+          </div>
+        </div>
+      )}
+
       {/* Table Tabs */}
       <div className="card p-6">
         <div className="flex items-center justify-between mb-4">
@@ -190,21 +242,19 @@ export const ParsingTable: React.FC = () => {
           <div className="flex space-x-1 bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => setActiveTable('action')}
-              className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                activeTable === 'action'
-                  ? 'bg-white text-primary-700 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
+              className={`px-3 py-1 text-sm rounded-md transition-colors ${activeTable === 'action'
+                ? 'bg-white text-primary-700 shadow-sm'
+                : 'text-gray-600 hover:text-gray-800'
+                }`}
             >
               ACTION Table
             </button>
             <button
               onClick={() => setActiveTable('goto')}
-              className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                activeTable === 'goto'
-                  ? 'bg-white text-primary-700 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
+              className={`px-3 py-1 text-sm rounded-md transition-colors ${activeTable === 'goto'
+                ? 'bg-white text-primary-700 shadow-sm'
+                : 'text-gray-600 hover:text-gray-800'
+                }`}
             >
               GOTO Table
             </button>
@@ -218,7 +268,22 @@ export const ParsingTable: React.FC = () => {
               <strong>Current Step:</strong> State {currentState}, Token '{currentToken}'
             </div>
             <div className="text-sm text-blue-700 mt-1">
-              {currentStepData.explanation}
+              {currentStepData.explanation || 'No explanation available'}
+            </div>
+          </div>
+        )}
+
+        {/* Hover Information */}
+        {hoveredCell && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="text-sm text-blue-800">
+              <strong>Cell Information:</strong>
+            </div>
+            <div className="text-sm text-blue-700 mt-1">
+              State: {hoveredCell.row - 1}, Symbol: '{hoveredCell.table === 'action' ? actionTable?.headers[hoveredCell.col] : gotoTable?.headers[hoveredCell.col]}'
+            </div>
+            <div className="text-sm text-blue-700">
+              Value: {hoveredCell.table === 'action' ? actionTable?.rows[hoveredCell.row]?.[hoveredCell.col] : gotoTable?.rows[hoveredCell.row]?.[hoveredCell.col] || 'Empty'}
             </div>
           </div>
         )}

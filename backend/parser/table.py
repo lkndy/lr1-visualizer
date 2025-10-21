@@ -58,7 +58,7 @@ class ParsingTable:
 
         if key in self.action_table:
             existing_action = self.action_table[key]
-            conflict_type = "shift_reduce" if existing_action.action_type == ActionType.SHIFT else "reduce_reduce"
+            conflict_type = "shift_reduce" if existing_action.action_type == ActionType.SHIFT.value else "reduce_reduce"
             self._add_conflict(state_index, lookahead, existing_action, action, conflict_type)
         else:
             self.action_table[key] = action
@@ -72,7 +72,7 @@ class ParsingTable:
 
                 if key in self.action_table:
                     existing_action = self.action_table[key]
-                    conflict_type = "shift_reduce" if existing_action.action_type == ActionType.REDUCE else "shift_shift"
+                    conflict_type = "shift_reduce" if existing_action.action_type == ActionType.REDUCE.value else "shift_shift"
                     self._add_conflict(state_index, transition.symbol.name, existing_action, action, conflict_type)
                 else:
                     self.action_table[key] = action
@@ -131,7 +131,7 @@ class ParsingTable:
                 {
                     "state": conflict.state,
                     "symbol": conflict.symbol,
-                    "actions": [{"type": action.action_type.value, "target": action.target} for action in conflict.actions],
+                    "actions": [{"type": action.action_type, "target": action.target} for action in conflict.actions],
                 },
             )
 
@@ -164,16 +164,6 @@ class ParsingTable:
 
     def export_action_table(self) -> dict:
         """Export ACTION table in a format suitable for frontend display."""
-        print(f"DEBUG EXPORT: self.action_table has {len(self.action_table.keys())} keys.")
-        import random
-
-        # Sample keys safely
-        keys_list = list(self.action_table.keys())
-        sample_size = min(5, len(keys_list))
-        if sample_size > 0:
-            sample_keys = random.sample(keys_list, sample_size)
-            print(f"DEBUG EXPORT: Sample keys: {sample_keys}")
-
         # Collect all states and terminal symbols
         states = set()
         symbols = set()
@@ -185,23 +175,18 @@ class ParsingTable:
         if self.automaton.grammar.end_of_input in [s.name for s in self.automaton.grammar.terminals]:
             symbols.add(self.automaton.grammar.end_of_input)
 
-        print(f"DEBUG EXPORT: Collected {len(states)} states.")
-        print(f"DEBUG EXPORT: Collected {len(symbols)} symbols: {sorted(list(symbols))}")
-
         states = sorted(list(states))
         symbols = sorted(list(symbols))
 
         # Create table structure
         table = {"headers": ["State", *symbols], "rows": []}
 
-        found_actions = 0
         for state in states:
             row = [f"State {state}"]
             for symbol in symbols:
                 key = (state, symbol)
                 action = self.action_table.get(key)
                 if action:
-                    found_actions += 1
                     if action.action_type == ActionType.SHIFT:
                         row.append(f"s{action.target}")
                     elif action.action_type == ActionType.REDUCE:
@@ -213,16 +198,6 @@ class ParsingTable:
                 else:
                     row.append("")
             table["rows"].append(row)
-
-        print(f"DEBUG EXPORT: Total actions found while building rows: {found_actions}")
-
-        # Debug: check if we have any non-empty cells
-        non_empty_count = 0
-        for row in table["rows"]:
-            for cell in row[1:]:
-                if cell and cell != "":
-                    non_empty_count += 1
-        print(f"DEBUG: Exported table has {non_empty_count} non-empty cells")
 
         return table
 

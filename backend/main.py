@@ -1,6 +1,7 @@
 """Main FastAPI application entry point."""
 
 from api.routes import router
+from debug.web_debugger import debug_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -25,6 +26,7 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(router)
+app.include_router(debug_router)
 
 
 # Health check endpoint

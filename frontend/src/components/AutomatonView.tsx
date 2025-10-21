@@ -31,7 +31,9 @@ export const AutomatonView: React.FC = () => {
     currentStep,
     parsingSteps,
     grammarInfo,
-    isGeneratingTable
+    isGeneratingTable,
+    getCurrentState,
+    getCurrentStepData
   } = useParserStore();
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -43,6 +45,10 @@ export const AutomatonView: React.FC = () => {
       setEdges([]);
       return;
     }
+
+    // Get current state from parsing stack
+    const currentState = getCurrentState();
+    const currentStepData = getCurrentStepData();
 
     // Create nodes from LR(1) states data
     const automatonNodes: Node<AutomatonNodeData>[] = grammarInfo.lr1_states.map((state, index) => {
@@ -60,7 +66,7 @@ export const AutomatonView: React.FC = () => {
         data: {
           state: state.state_number,
           items: state.items,
-          isCurrent: currentStep === state.state_number,
+          isCurrent: currentState === state.state_number, // FIXED: Use currentState from stack
           isHighlighted: false,
         },
       };
@@ -77,6 +83,12 @@ export const AutomatonView: React.FC = () => {
       // Check if transitions exist, otherwise create basic edges from shift symbols
       if (state.transitions && state.transitions.length > 0) {
         state.transitions.forEach((transition) => {
+          // Check if this edge is part of the current parsing path
+          const isActive = Boolean(currentStepData &&
+            state.state_number === currentState &&
+            currentStepData.action?.type === 'shift' &&
+            currentStepData.current_token === transition.symbol);
+
           automatonEdges.push({
             id: `e${state.state_number}-${transition.to_state}-${transition.symbol}`,
             source: state.state_number.toString(),
@@ -84,7 +96,7 @@ export const AutomatonView: React.FC = () => {
             label: transition.symbol,
             data: {
               symbol: transition.symbol,
-              isActive: false,
+              isActive,
               isHighlighted: false,
             },
           });
@@ -92,7 +104,7 @@ export const AutomatonView: React.FC = () => {
       } else {
         // Fallback: create basic transitions based on shift symbols
         console.log(`No transitions for state ${state.state_number}, using shift symbols:`, state.shift_symbols);
-        state.shift_symbols.forEach((symbol, index) => {
+        state.shift_symbols.forEach((symbol) => {
           const targetState = (state.state_number + 1) % grammarInfo.lr1_states.length;
           if (targetState !== state.state_number) {
             automatonEdges.push({
@@ -115,7 +127,7 @@ export const AutomatonView: React.FC = () => {
 
     setNodes(automatonNodes);
     setEdges(automatonEdges);
-  }, [currentStep, isGeneratingTable, grammarInfo]);
+  }, [currentStep, isGeneratingTable, grammarInfo, getCurrentState, getCurrentStepData]);
 
   const onConnect = useCallback((params: Connection) => {
     setEdges((eds) => addEdge(params, eds));
@@ -123,12 +135,12 @@ export const AutomatonView: React.FC = () => {
 
   const nodeTypes = {
     default: ({ data }: { data: AutomatonNodeData }) => (
-      <div className={`px-2 py-1 bg-white border-2 rounded shadow-sm min-w-[120px] max-w-[150px] ${data.isCurrent
-        ? 'border-blue-500 bg-blue-50'
-        : 'border-gray-200 hover:border-gray-300'
+      <div className={`px-2 py-1 bg-white border-2 rounded shadow-sm min-w-[120px] max-w-[150px] transition-all duration-300 ${data.isCurrent
+        ? 'border-blue-500 bg-blue-50 shadow-lg transform scale-105'
+        : 'border-gray-200 hover:border-gray-300 hover:shadow-md hover:transform hover:scale-102'
         }`}>
         <div className="text-center mb-1">
-          <div className="text-sm font-bold text-gray-900">
+          <div className={`text-sm font-bold ${data.isCurrent ? 'text-blue-900' : 'text-gray-900'}`}>
             {data.state}
           </div>
         </div>
@@ -137,7 +149,8 @@ export const AutomatonView: React.FC = () => {
           {data.items.slice(0, 3).map((item, index) => (
             <div
               key={index}
-              className="text-xs font-mono bg-gray-100 px-1 py-0.5 rounded text-gray-700 truncate"
+              className={`text-xs font-mono px-1 py-0.5 rounded text-gray-700 truncate transition-colors duration-200 ${data.isCurrent ? 'bg-blue-100' : 'bg-gray-100 hover:bg-gray-200'
+                }`}
               title={item}
             >
               {item.length > 20 ? item.substring(0, 20) + '...' : item}
@@ -173,6 +186,16 @@ export const AutomatonView: React.FC = () => {
     },
   };
 
+  const getEdgeStyle = (edge: any) => {
+    const isActive = edge.data?.isActive;
+    return {
+      strokeWidth: isActive ? 4 : 2,
+      stroke: isActive ? '#f59e0b' : '#3b82f6',
+      strokeDasharray: isActive ? '5,5' : 'none',
+      opacity: isActive ? 1 : 0.7,
+    };
+  };
+
   return (
     <div className="card p-6">
       <div className="flex items-center justify-between mb-4">
@@ -184,15 +207,25 @@ export const AutomatonView: React.FC = () => {
 
       {/* Current State Info */}
       {parsingSteps.length > 0 && currentStep < parsingSteps.length && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="text-sm text-blue-800">
-            <strong>Current State:</strong> {
-              nodes.find(n => n.data.isCurrent)?.data.state || 'Unknown'
-            }
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm text-blue-800">
+              <strong>Current State:</strong> {
+                nodes.find(n => n.data.isCurrent)?.data.state || 'Unknown'
+              }
+            </div>
+            <div className="text-xs text-blue-600">
+              Step {currentStep + 1} of {parsingSteps.length}
+            </div>
           </div>
-          <div className="text-sm text-blue-700 mt-1">
-            {parsingSteps[currentStep]?.explanation}
+          <div className="text-sm text-blue-700 mb-2">
+            {parsingSteps[currentStep]?.explanation || 'No explanation available'}
           </div>
+          {currentStepData?.current_token && (
+            <div className="text-sm text-blue-700">
+              <strong>Current Token:</strong> {currentStepData.current_token}
+            </div>
+          )}
         </div>
       )}
 
@@ -237,6 +270,26 @@ export const AutomatonView: React.FC = () => {
           <span className="text-sm text-gray-600">Other states</span>
         </div>
       </div>
+
+      {/* State Details Panel */}
+      {currentStepData && (
+        <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+          <h4 className="text-sm font-semibold text-gray-800 mb-2">Current State Details</h4>
+          <div className="space-y-2">
+            <div className="text-xs text-gray-600">
+              <strong>Stack:</strong> {currentStepData.stack.map(([state, symbol]) => `${state}${symbol ? `,${symbol}` : ''}`).join(' | ')}
+            </div>
+            <div className="text-xs text-gray-600">
+              <strong>Input Remaining:</strong> {currentStepData.input_remaining?.join(' ') || 'None'}
+            </div>
+            {currentStepData.action && (
+              <div className="text-xs text-gray-600">
+                <strong>Action:</strong> {currentStepData.action.type} {currentStepData.action.target ? `(${currentStepData.action.target})` : ''}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Instructions */}
       <div className="mt-4 text-xs text-gray-500">

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from parser.types import Production, Symbol, SymbolType
 
 if TYPE_CHECKING:
-    from parser.grammar import Grammar
+    from parser.grammar_v2 import Grammar
 
 
 @dataclass(frozen=True)

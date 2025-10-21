@@ -16,6 +16,40 @@ export interface LR1Item {
   lookahead: Symbol;
 }
 
+// NEW: Interactive derivation types matching backend response
+export interface InteractiveDerivationStep {
+  step_number: number;
+  stack: [number, string][];
+  input_remaining: string[];
+  current_token: string | null;
+  action: {
+    type: 'shift' | 'reduce' | 'accept' | 'error';
+    target: number | null;
+    description: string; // Human-readable: "Shift to state 4"
+  };
+  explanation: string;
+  ast_nodes: ASTNode[];
+  derivation_so_far: string; // NEW: Derivation progress
+}
+
+export interface InteractiveDerivationResponse {
+  valid: boolean;
+  error: string | null;
+  input_string: string;
+  tokens: string[]; // NEW: Tokenized input
+  total_steps: number;
+  success: boolean;
+  steps: InteractiveDerivationStep[];
+  summary: {
+    total_steps: number;
+    success: boolean;
+    grammar_type: string; // "LR(1)", "SLR(1)", etc.
+    num_states: number;
+    num_productions: number;
+  };
+}
+
+// Legacy types for backward compatibility (deprecated)
 export interface ParsingAction {
   action_type: 'shift' | 'reduce' | 'accept' | 'error';
   target?: number;
@@ -54,6 +88,18 @@ export interface ConflictInfo {
   conflict_type: string;
 }
 
+// ENHANCED: LR(1) state type matching backend response
+export interface LR1State {
+  state_number: number;
+  items: string[]; // Formatted items: "E → • E + T , $"
+  shift_symbols: string[];
+  reduce_items: string[];
+  transitions: Array<{
+    to_state: number;
+    symbol: string;
+  }>;
+}
+
 export interface GrammarValidationResponse {
   valid: boolean;
   errors: GrammarError[];
@@ -72,18 +118,9 @@ export interface GrammarValidationResponse {
       rhs: string[];
       index: number;
     }>;
-    first_sets: Record<string, string[]>;
-    follow_sets: Record<string, string[]>;
-    lr1_states: Array<{
-      state_number: number;
-      items: string[];
-      shift_symbols: string[];
-      reduce_items: string[];
-      transitions: Array<{
-        to_state: number;
-        symbol: string;
-      }>;
-    }>;
+    first_sets: Record<string, string[]>; // NEW: FIRST sets
+    follow_sets: Record<string, string[]>; // NEW: FOLLOW sets
+    lr1_states: LR1State[]; // NEW: Full automaton data
     sample_strings: string[];
     parsing_table_preview: {
       action_table: {
@@ -165,16 +202,22 @@ export interface ParserState {
   tableSummary?: ParsingTableResponse['summary'];
   tableConflicts: ConflictInfo[];
 
-  // Parsing state
+  // Parsing state - UPDATED for interactive derivation
   inputString: string;
   selectedSampleString: string;
   availableSampleStrings: string[];
   currentStep: number;
   totalSteps: number;
-  parsingSteps: ParsingStep[];
+  parsingSteps: InteractiveDerivationStep[]; // UPDATED: Use new type
   ast?: ParsingResponse['ast'];
   parsingValid: boolean;
   parsingError?: string;
+
+  // NEW: Interactive derivation fields
+  tokens: string[]; // Tokenized input
+  currentToken: string | null; // Token being processed
+  derivationProgress: string; // Current derivation string
+  currentStateInAutomaton: number | null; // Current state for automaton highlighting
 
   // UI state
   isPlaying: boolean;
@@ -208,6 +251,11 @@ export interface ParserActions {
   play: () => void;
   pause: () => void;
   reset: () => void;
+
+  // NEW: Computed selectors for interactive derivation
+  getCurrentStepData: () => InteractiveDerivationStep | null;
+  getCurrentState: () => number | null;
+  getCurrentAction: () => InteractiveDerivationStep['action'] | null;
 
   // UI actions
   setPlaySpeed: (speed: number) => void;

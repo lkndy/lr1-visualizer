@@ -52,7 +52,7 @@ export const ASTVisualizer: React.FC = () => {
     // Build tree structure from AST nodes
     const astNodes = Object.values(ast.nodes) as ASTNode[];
     const nodeMap = new Map(astNodes.map(node => [node.id, node]));
-    
+
     // Find root node
     const rootNode = astNodes.find(node => !node.parent) || astNodes[0];
     if (!rootNode) return;
@@ -79,7 +79,7 @@ export const ASTVisualizer: React.FC = () => {
           y: d.y || 0,
           isNew: currentStep > 0 && parsingSteps[currentStep]?.ast_nodes?.some(
             astNode => astNode.id === node.id
-          ),
+          ) || false,
           isHighlighted: false,
           nodeType: node.symbol_type as 'terminal' | 'non_terminal' | 'epsilon',
         });
@@ -91,7 +91,7 @@ export const ASTVisualizer: React.FC = () => {
             target: d.data.id,
             isNew: currentStep > 0 && parsingSteps[currentStep]?.ast_nodes?.some(
               astNode => astNode.id === node.id
-            ),
+            ) || false,
             isHighlighted: false,
           });
         }
@@ -118,7 +118,7 @@ export const ASTVisualizer: React.FC = () => {
 
   const getNodeColor = (nodeType: string, isHighlighted: boolean) => {
     if (isHighlighted) return '#3b82f6';
-    
+
     switch (nodeType) {
       case 'terminal':
         return '#dc2626';
@@ -169,9 +169,9 @@ export const ASTVisualizer: React.FC = () => {
       .attr('d', (d) => {
         const sourceNode = nodes.find(n => n.id === d.source);
         const targetNode = nodes.find(n => n.id === d.target);
-        
+
         if (!sourceNode || !targetNode) return '';
-        
+
         return `M ${sourceNode.x} ${sourceNode.y} L ${targetNode.x} ${targetNode.y}`;
       })
       .attr('stroke', (d) => d.isNew ? '#3b82f6' : '#6b7280')
@@ -278,14 +278,14 @@ export const ASTVisualizer: React.FC = () => {
       {/* Legend */}
       <div className="mt-4 grid grid-cols-3 gap-4">
         <div className="flex items-center space-x-2">
-          <div 
+          <div
             className="w-4 h-4 rounded-full border-2 border-white"
             style={{ backgroundColor: getNodeColor('non_terminal', false) }}
           ></div>
           <span className="text-sm text-gray-600">Non-terminal</span>
         </div>
         <div className="flex items-center space-x-2">
-          <div 
+          <div
             className="w-4 h-4 rounded-full border-2 border-white"
             style={{ backgroundColor: getNodeColor('terminal', false) }}
           ></div>

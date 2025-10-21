@@ -1,10 +1,9 @@
 """LR(1) parsing engine for step-by-step execution and AST building."""
 
-import copy
 from dataclasses import dataclass
 from typing import Any
 
-from parser.grammar import Grammar
+from parser.grammar_v2 import Grammar
 from parser.table import ParsingTable
 from parser.types import ActionType, ASTNode, ParsingAction, ParsingStep, Production, SymbolType
 
@@ -39,6 +38,96 @@ class ParserEngine:
         """Parse input string and return list of all parsing steps."""
         tokens = self._tokenize(input_string)
         return self._parse_tokens(tokens)
+
+    def parse_interactive(self, input_string: str) -> dict[str, Any]:
+        """Parse input string and return detailed interactive derivation information."""
+        tokens = self._tokenize(input_string)
+        steps = self._parse_tokens(tokens)
+
+        # Create detailed derivation information
+        derivation_info = {
+            "input_string": input_string,
+            "tokens": tokens,
+            "total_steps": len(steps),
+            "success": len(steps) > 0 and steps[-1].action.action_type == ActionType.ACCEPT.value,
+            "steps": [],
+        }
+
+        for i, step in enumerate(steps):
+            step_info = {
+                "step_number": i + 1,
+                "stack": step.stack.copy(),
+                "input_remaining": tokens[step.input_pointer :] if step.input_pointer < len(tokens) else [],
+                "current_token": step.current_token,
+                "action": {
+                    "type": step.action.action_type,
+                    "target": step.action.target,
+                    "description": self._get_action_description(step.action),
+                },
+                "explanation": step.explanation,
+                "ast_nodes": step.ast_nodes.copy() if step.ast_nodes else [],
+                "derivation_so_far": self._get_derivation_so_far(step.stack, step.ast_nodes),
+            }
+            derivation_info["steps"].append(step_info)
+
+        return derivation_info
+
+    def _get_action_description(self, action: ParsingAction) -> str:
+        """Get a human-readable description of the parsing action."""
+        if action.action_type == ActionType.SHIFT.value:
+            return f"Shift to state {action.target}"
+        elif action.action_type == ActionType.REDUCE.value:
+            production = self.grammar.productions[action.target]
+            return f"Reduce by {production.lhs.name} → {' '.join(str(s) for s in production.rhs) if production.rhs else 'ε'}"
+        elif action.action_type == ActionType.ACCEPT.value:
+            return "Accept - parsing complete"
+        else:
+            return "Error"
+
+    def _get_derivation_so_far(self, stack: list[tuple[int, str]], ast_nodes: list[dict[str, Any]]) -> str:
+        """Get the current derivation string from the stack and AST nodes."""
+        if not stack:
+            return ""
+
+        # Get the top of the stack (current state and symbol)
+        current_state, current_symbol = stack[-1]
+
+        # If we have AST nodes, try to build a derivation from them
+        if ast_nodes:
+            # Find the root node (the one that's not a child of any other)
+            root_nodes = [node for node in ast_nodes if not any(node["id"] in other.get("children", []) for other in ast_nodes)]
+            if root_nodes:
+                return self._build_derivation_from_ast(root_nodes[0], ast_nodes)
+
+        # Fallback: return the current symbol
+        return current_symbol
+
+    def _build_derivation_from_ast(self, root_node: dict[str, Any], all_nodes: list[dict[str, Any]]) -> str:
+        """Build a derivation string from the AST nodes."""
+        if not root_node:
+            return ""
+
+        # If it's a terminal, return its value
+        if root_node.get("type") == "terminal":
+            return root_node.get("value", "")
+
+        # If it's a non-terminal, build from children
+        children = root_node.get("children", [])
+        if not children:
+            return root_node.get("symbol", "")
+
+        # Get child nodes
+        child_nodes = [node for node in all_nodes if node["id"] in children]
+        child_nodes.sort(key=lambda x: children.index(x["id"]))
+
+        # Build derivation from children
+        parts = []
+        for child in child_nodes:
+            child_derivation = self._build_derivation_from_ast(child, all_nodes)
+            if child_derivation:
+                parts.append(child_derivation)
+
+        return " ".join(parts) if parts else root_node.get("symbol", "")
 
     def _tokenize(self, input_string: str) -> list[str]:
         """Tokenize input string based on grammar terminals."""
@@ -86,15 +175,34 @@ class ParserEngine:
             next_node_id=0,
         )
 
-        while True:
+        max_steps = len(tokens) * 10  # Safety limit to prevent infinite loops
+        step_count = 0
+
+        while step_count < max_steps:
             step = self._execute_step(parse_state)
             steps.append(step)
+            step_count += 1
 
-            if step.action.action_type in (ActionType.ACCEPT, ActionType.ERROR):
+            if step.action.action_type in (ActionType.ACCEPT.value, ActionType.ERROR.value):
                 break
 
             # Update parse state for next iteration
             parse_state = self._update_parse_state(parse_state, step)
+
+        # If we hit the limit, add an error step
+        if step_count >= max_steps:
+            error_step = ParsingStep(
+                step_number=step_count,
+                stack=parse_state.stack.copy(),
+                input_pointer=parse_state.input_pointer,
+                current_token=parse_state.input_tokens[parse_state.input_pointer]
+                if parse_state.input_pointer < len(parse_state.input_tokens)
+                else None,
+                action=ParsingAction(action_type=ActionType.ERROR, target=None),
+                explanation="Error: Maximum parsing steps exceeded - possible infinite loop",
+                ast_nodes=[],
+            )
+            steps.append(error_step)
 
         return steps
 
@@ -141,7 +249,7 @@ class ParserEngine:
 
         return ParsingStep(
             step_number=parse_state.step_number,
-            stack=copy.deepcopy(parse_state.stack),
+            stack=parse_state.stack.copy(),
             input_pointer=parse_state.input_pointer,
             current_token=current_token,
             action=action,
@@ -196,14 +304,22 @@ class ParserEngine:
 
     def _update_parse_state(self, parse_state: ParseState, step: ParsingStep) -> ParseState:
         """Update parse state after executing a step."""
-        new_parse_state = copy.deepcopy(parse_state)
+        # Create a new parse state without deep copying to avoid circular references
+        new_parse_state = ParseState(
+            stack=parse_state.stack.copy(),
+            input_tokens=parse_state.input_tokens.copy(),
+            input_pointer=parse_state.input_pointer,
+            step_number=parse_state.step_number + 1,
+            ast_nodes=parse_state.ast_nodes.copy(),
+            next_node_id=parse_state.next_node_id,
+        )
 
-        if step.action.action_type == ActionType.SHIFT:
+        if step.action.action_type == ActionType.SHIFT.value:
             # Push new state and symbol onto stack
             new_parse_state.stack.append((step.action.target, step.current_token))
             new_parse_state.input_pointer += 1
 
-        elif step.action.action_type == ActionType.REDUCE:
+        elif step.action.action_type == ActionType.REDUCE.value:
             # Pop symbols from stack and push new symbol
             production = self.grammar.productions[step.action.target]
             rhs_length = len(production.rhs)

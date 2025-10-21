@@ -1,0 +1,375 @@
+Metadata-Version: 2.4
+Name: lr1-parser-visualizer-backend
+Version: 2.0.0
+Summary: A comprehensive backend for LR(1) parser visualization with advanced debugging capabilities
+Author: LR(1) Parser Visualizer Team
+License: MIT
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Education
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Topic :: Education
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Classifier: Topic :: Software Development :: Compilers
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.104.1
+Requires-Dist: uvicorn[standard]>=0.24.0
+Requires-Dist: pydantic>=2.5.0
+Requires-Dist: websockets>=12.0
+Requires-Dist: python-multipart>=0.0.6
+Requires-Dist: lark>=1.1.0
+Requires-Dist: psutil>=5.9.6
+Requires-Dist: httpx<0.25.0,>=0.24.0
+Requires-Dist: pytest-asyncio>=0.21.1
+Requires-Dist: flake8>=7.3.0
+Provides-Extra: dev
+Requires-Dist: black>=23.0.0; extra == "dev"
+Requires-Dist: isort>=5.12.0; extra == "dev"
+Requires-Dist: flake8>=6.0.0; extra == "dev"
+Requires-Dist: mypy>=1.0.0; extra == "dev"
+Provides-Extra: test
+Requires-Dist: pytest>=7.4.0; extra == "test"
+Requires-Dist: pytest-cov>=4.1.0; extra == "test"
+Requires-Dist: pytest-asyncio>=0.21.0; extra == "test"
+Dynamic: requires-python
+
+# LR(1) Parser Visualizer Backend
+
+A comprehensive backend implementation for an LR(1) parser visualizer with advanced debugging capabilities, built using Lark for grammar parsing and FastAPI for the web interface.
+
+## Features
+
+### Core Functionality
+- **Lark-based Grammar Parsing**: Clean, robust grammar parsing using Lark's EBNF format
+- **LR(1) Automaton Construction**: Canonical collection of LR(1) item sets with conflict detection
+- **Parsing Table Generation**: ACTION and GOTO tables with comprehensive validation
+- **Step-by-step Parsing**: Detailed parsing trace with AST construction
+- **Conflict Analysis**: Shift-reduce and reduce-reduce conflict detection and resolution suggestions
+
+### Debugging Infrastructure
+- **Structured Logging**: Comprehensive logging with multiple levels and structured output
+- **Grammar Inspector**: Detailed analysis of grammar properties, FIRST/FOLLOW sets, and symbol relationships
+- **Automaton Inspector**: State-by-state exploration with transition visualization
+- **Table Inspector**: Parsing table analysis with density metrics and conflict highlighting
+- **Performance Profiler**: CPU and memory profiling with bottleneck analysis
+
+### Testing Suite
+- **Comprehensive Test Coverage**: 100+ test cases covering all modules
+- **Parametrized Tests**: Multiple grammar examples and edge cases
+- **Integration Tests**: Full pipeline testing from grammar to parsing
+- **Performance Tests**: Automated performance regression testing
+
+### CLI and Web Tools
+- **Command-line Interface**: Full-featured CLI for grammar validation, inspection, and profiling
+- **Web Debugging API**: RESTful endpoints for interactive debugging
+- **Real-time Analysis**: WebSocket support for live grammar analysis
+
+## Architecture
+
+### Core Modules
+
+#### `parser/`
+- **`lark_grammar_v2.py`**: Clean Lark-based grammar parser with EBNF support
+- **`grammar_v2.py`**: Refactored Grammar class with proper FIRST/FOLLOW computation
+- **`automaton.py`**: LR(1) automaton construction with conflict detection
+- **`table.py`**: Parsing table generation (ACTION/GOTO) with export functionality
+- **`engine.py`**: Step-by-step parsing engine with AST construction
+- **`items.py`**: LR(1) item sets with closure and GOTO operations
+
+#### `debug/`
+- **`logger.py`**: Structured logging infrastructure
+- **`inspector.py`**: Grammar, automaton, and table inspection tools
+- **`validators.py`**: Comprehensive validation for all components
+- **`cli.py`**: Command-line debugging interface
+- **`profiler.py`**: Performance profiling and bottleneck analysis
+- **`web_debugger.py`**: Web-based debugging API endpoints
+
+#### `tests/`
+- **`conftest.py`**: Pytest fixtures and test data generators
+- **`test_grammar.py`**: Grammar parsing and validation tests
+- **`test_items.py`**: LR(1) item and item set tests
+- **`test_automaton.py`**: Automaton construction and conflict detection tests
+- **`test_table.py`**: Parsing table generation and validation tests
+- **`test_engine.py`**: Parser engine and AST construction tests
+- **`test_api.py`**: API endpoint integration tests
+
+## Quick Start
+
+### Installation
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run tests
+pytest backend/tests/
+
+# Start the development server
+python backend/main.py
+```
+
+### Basic Usage
+
+#### Grammar Validation
+```python
+from parser.grammar_v2 import Grammar
+
+# Parse grammar
+grammar = Grammar.from_text("""
+E: E "+" T | E "-" T | T
+T: T "*" F | T "/" F | F
+F: "(" E ")" | "id" | "num"
+""", "E")
+
+# Validate
+errors = grammar.validate()
+if not errors:
+    print("Grammar is valid!")
+```
+
+#### CLI Usage
+```bash
+# Validate grammar
+python -m backend.debug.cli validate grammar.txt
+
+# Inspect grammar properties
+python -m backend.debug.cli inspect grammar.txt --format json
+
+# Generate parsing table
+python -m backend.debug.cli table grammar.txt --show-conflicts
+
+# Profile performance
+python -m backend.debug.cli profile grammar.txt --iterations 100
+```
+
+#### Web API Usage
+```bash
+# Analyze grammar
+curl -X POST http://localhost:8000/debug/grammar/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"grammar_text": "E: E \"+\" T | T", "start_symbol": "E"}'
+
+# Analyze automaton
+curl -X POST http://localhost:8000/debug/automaton/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"grammar_text": "E: E \"+\" T | T", "start_symbol": "E"}'
+```
+
+## Grammar Format
+
+The parser supports multiple grammar formats:
+
+### EBNF Format (Recommended)
+```
+E: E "+" T | E "-" T | T
+T: T "*" F | T "/" F | F
+F: "(" E ")" | "id" | "num"
+```
+
+### BNF Format
+```
+E -> E + T | E - T | T
+T -> T * F | T / F | F
+F -> ( E ) | id | num
+```
+
+### Features
+- **Comments**: Lines starting with `#` are ignored
+- **Quoted Terminals**: Use `"terminal"` for terminals with special characters
+- **Epsilon Productions**: Use `ε`, `epsilon`, or `eps` for empty productions
+- **Mixed Case**: Non-terminals can be any case, terminals are typically lowercase
+
+## Debugging Tools
+
+### Grammar Inspector
+```python
+from debug.inspector import GrammarInspector
+
+inspector = GrammarInspector(grammar)
+report = inspector.generate_report()
+
+print(f"Terminals: {report['symbols']['terminals']}")
+print(f"FIRST sets: {report['first_sets']}")
+print(f"FOLLOW sets: {report['follow_sets']}")
+```
+
+### Performance Profiler
+```python
+from debug.profiler import profile_grammar
+
+results = profile_grammar(grammar_text, "E", iterations=10)
+print(f"Average time: {results['full_pipeline']['average_pipeline_time']:.4f}s")
+```
+
+### Conflict Resolution
+```python
+from debug.web_debugger import debug_router
+
+# Use the web API to get conflict resolution suggestions
+# POST /debug/conflicts/resolve
+```
+
+## Testing
+
+### Run All Tests
+```bash
+pytest backend/tests/ -v
+```
+
+### Run Specific Test Categories
+```bash
+# Grammar tests
+pytest backend/tests/test_grammar.py -v
+
+# Automaton tests
+pytest backend/tests/test_automaton.py -v
+
+# Table tests
+pytest backend/tests/test_table.py -v
+```
+
+### Test Coverage
+```bash
+pytest backend/tests/ --cov=backend --cov-report=html
+```
+
+## Configuration
+
+### Environment Variables
+- `DEBUG=true`: Enable debug logging
+- `LOG_LEVEL=INFO`: Set logging level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)
+- `JSON_LOGGING=true`: Enable JSON structured logging
+
+### Logging Configuration
+```python
+from debug.logger import setup_logging
+
+# Setup with custom configuration
+setup_logging(level="DEBUG", json_format=True)
+```
+
+## API Endpoints
+
+### Core Parser API
+- `POST /api/v1/grammar/validate` - Validate grammar
+- `POST /api/v1/parser/table` - Generate parsing table
+- `POST /api/v1/parser/parse` - Parse input string
+- `GET /api/v1/examples` - Get example grammars
+- `WebSocket /api/v1/ws/parse` - Real-time parsing
+
+### Debug API
+- `POST /debug/grammar/analyze` - Analyze grammar properties
+- `POST /debug/automaton/analyze` - Analyze automaton
+- `POST /debug/table/analyze` - Analyze parsing table
+- `POST /debug/parse/trace` - Trace parsing steps
+- `POST /debug/conflicts/resolve` - Resolve conflicts
+- `POST /debug/performance/profile` - Profile performance
+- `GET /debug/examples` - Get debug examples
+- `GET /debug/health` - Debug health check
+
+## Performance
+
+### Benchmarks
+- **Small Grammar** (< 10 productions): < 10ms
+- **Medium Grammar** (10-50 productions): < 100ms
+- **Large Grammar** (50+ productions): < 1000ms
+
+### Memory Usage
+- **Grammar Parsing**: ~1MB per 100 productions
+- **Automaton Construction**: ~10MB per 1000 states
+- **Table Generation**: ~5MB per 1000 entries
+
+### Optimization Tips
+1. Use EBNF format for better parsing performance
+2. Avoid deeply nested productions
+3. Minimize epsilon productions
+4. Use left recursion instead of right recursion for LR parsers
+
+## Troubleshooting
+
+### Common Issues
+
+#### Grammar Parsing Errors
+```bash
+# Check grammar syntax
+python -m backend.debug.cli validate grammar.txt
+
+# Get detailed analysis
+python -m backend.debug.cli inspect grammar.txt --sections all
+```
+
+#### Conflict Resolution
+```bash
+# Analyze conflicts
+python -m backend.debug.cli table grammar.txt --show-conflicts
+
+# Get resolution suggestions via API
+curl -X POST http://localhost:8000/debug/conflicts/resolve \
+  -H "Content-Type: application/json" \
+  -d '{"grammar_text": "your_grammar_here"}'
+```
+
+#### Performance Issues
+```bash
+# Profile performance
+python -m backend.debug.cli profile grammar.txt --iterations 100
+
+# Check memory usage
+python -c "from debug.profiler import ParserProfiler; p = ParserProfiler(); print(p.get_memory_usage())"
+```
+
+### Debug Mode
+```bash
+# Enable debug logging
+export DEBUG=true
+export LOG_LEVEL=DEBUG
+
+# Run with debug output
+python backend/main.py
+```
+
+## Contributing
+
+### Development Setup
+```bash
+# Install development dependencies
+pip install -r requirements.txt
+pip install pytest pytest-cov black isort
+
+# Run code formatting
+black backend/
+isort backend/
+
+# Run linting
+pytest backend/tests/ --flake8
+```
+
+### Adding New Features
+1. Write tests first (TDD approach)
+2. Implement the feature
+3. Update documentation
+4. Add CLI/web interface if applicable
+5. Run full test suite
+
+### Code Style
+- Follow PEP 8
+- Use type hints
+- Write comprehensive docstrings
+- Add logging for debugging
+- Include error handling
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- **Lark**: For excellent grammar parsing capabilities
+- **FastAPI**: For the modern, fast web framework
+- **Pytest**: For comprehensive testing framework
+- **Python**: For the powerful, expressive language

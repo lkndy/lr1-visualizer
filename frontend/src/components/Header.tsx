@@ -25,26 +25,27 @@ export const Header: React.FC = () => {
           </div>
 
           {/* Actions */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 sm:space-x-4">
             <button
               onClick={() => setIsExamplesModalOpen(true)}
-              className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors"
+              className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors"
             >
               <FolderOpen className="w-4 h-4" />
-              <span className="text-sm">Load Example Grammar</span>
+              <span className="text-xs sm:text-sm hidden sm:inline">Load Example Grammar</span>
+              <span className="text-xs sm:hidden">Examples</span>
             </button>
 
             <button
-              className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
               onClick={() => window.open('https://github.com', '_blank')}
             >
               <Github className="w-4 h-4" />
-              <span className="text-sm">GitHub</span>
+              <span className="text-xs sm:text-sm hidden sm:inline">GitHub</span>
             </button>
 
-            <button className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">
+            <button className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">
               <Settings className="w-4 h-4" />
-              <span className="text-sm">Settings</span>
+              <span className="text-xs sm:text-sm hidden sm:inline">Settings</span>
             </button>
           </div>
         </div>

@@ -4,7 +4,7 @@ import { useParserStore } from '../store/parserStore';
 import { GrammarEditor } from './GrammarEditor';
 import { ParsingTable } from './ParsingTable';
 import { AutomatonView } from './AutomatonView';
-import { LoadingSpinner } from './LoadingSpinner';
+import { LoadingSpinner, SkeletonCard, SkeletonText } from './LoadingSpinner';
 
 export const GrammarConfigTab: React.FC = () => {
     const {
@@ -79,8 +79,8 @@ export const GrammarConfigTab: React.FC = () => {
                 <span
                     key={index}
                     className={`px-3 py-1 rounded-full text-sm font-medium ${symbolType === 'terminal'
-                            ? 'bg-green-100 text-green-800 border border-green-200'
-                            : 'bg-purple-100 text-purple-800 border border-purple-200'
+                        ? 'bg-green-100 text-green-800 border border-green-200'
+                        : 'bg-purple-100 text-purple-800 border border-purple-200'
                         }`}
                 >
                     {symbol.name}
@@ -165,9 +165,9 @@ export const GrammarConfigTab: React.FC = () => {
     );
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             {/* Left Column - Grammar Editor */}
-            <div className="lg:col-span-1 space-y-6">
+            <div className="xl:col-span-1 space-y-6">
                 <div className="card p-6">
                     <div className="flex items-center space-x-2 mb-4">
                         <FileText className="w-5 h-5 text-blue-600" />
@@ -240,11 +240,15 @@ export const GrammarConfigTab: React.FC = () => {
             </div>
 
             {/* Right Column - Grammar Analysis */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="xl:col-span-2 space-y-6">
                 {isValidatingGrammar && (
-                    <div className="card p-6 text-center">
-                        <LoadingSpinner />
-                        <p className="mt-4 text-gray-600">Analyzing grammar...</p>
+                    <div className="space-y-4">
+                        <div className="card p-6 text-center">
+                            <LoadingSpinner size="lg" text="Analyzing grammar..." />
+                        </div>
+                        <SkeletonCard />
+                        <SkeletonCard />
+                        <SkeletonCard />
                     </div>
                 )}
 

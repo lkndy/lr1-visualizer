@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Zap, Target, Info } from 'lucide-react';
+import { Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Zap, Target, Info, Keyboard } from 'lucide-react';
 import { useParserStore } from '../store/parserStore';
 import { StackVisualizer } from './StackVisualizer';
 import { ASTVisualizer } from './ASTVisualizer';
 import { StepControls } from './StepControls';
-import { LoadingSpinner } from './LoadingSpinner';
+import { LoadingSpinner, SkeletonCard, SkeletonText } from './LoadingSpinner';
+import { DerivationVisualizer } from './DerivationVisualizer';
+import { ActionTracePanel } from './ActionTracePanel';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 export const ParsingVisualizationTab: React.FC = () => {
     const {
@@ -20,7 +23,7 @@ export const ParsingVisualizationTab: React.FC = () => {
         isParsing,
         parsingValid,
         parsingError,
-        currentStepData,
+        getCurrentStepData,
         setInputString,
         selectSampleString,
         parseInput,
@@ -33,7 +36,14 @@ export const ParsingVisualizationTab: React.FC = () => {
         setPlaySpeed,
     } = useParserStore();
 
+    // Get current step data using the computed selector
+    const currentStepData = getCurrentStepData();
+
+    // Initialize keyboard shortcuts
+    const { shortcuts } = useKeyboardShortcuts();
+
     const [customInput, setCustomInput] = useState('');
+    const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
 
     const handleSampleSelect = (sample: string) => {
         selectSampleString(sample);
@@ -105,6 +115,8 @@ export const ParsingVisualizationTab: React.FC = () => {
                             onChange={(e) => handleCustomInput(e.target.value)}
                             placeholder="Enter a string to parse..."
                             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            aria-label="Custom input string for parsing"
+                            aria-describedby="input-help"
                         />
                         <button
                             onClick={handleParse}
@@ -112,7 +124,7 @@ export const ParsingVisualizationTab: React.FC = () => {
                             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                         >
                             {isParsing ? (
-                                <LoadingSpinner />
+                                <LoadingSpinner size="sm" color="white" />
                             ) : (
                                 <Play className="w-4 h-4" />
                             )}
@@ -209,7 +221,34 @@ export const ParsingVisualizationTab: React.FC = () => {
                                 className="flex-1 max-w-32"
                             />
                             <span className="text-sm text-gray-600">{playSpeed}x</span>
+
+                            {/* Keyboard Shortcuts Help */}
+                            <button
+                                onClick={() => setShowKeyboardShortcuts(!showKeyboardShortcuts)}
+                                className="flex items-center space-x-1 px-3 py-1 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                                title="Keyboard Shortcuts"
+                            >
+                                <Keyboard className="w-4 h-4" />
+                                <span>Shortcuts</span>
+                            </button>
                         </div>
+
+                        {/* Keyboard Shortcuts Help Panel */}
+                        {showKeyboardShortcuts && (
+                            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                <h4 className="text-sm font-semibold text-blue-800 mb-2">Keyboard Shortcuts</h4>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                                    {shortcuts.map((shortcut) => (
+                                        <div key={shortcut.key} className="flex items-center space-x-2">
+                                            <kbd className="px-2 py-1 bg-white border border-blue-300 rounded text-blue-800 font-mono">
+                                                {shortcut.key}
+                                            </kbd>
+                                            <span className="text-blue-700">{shortcut.description}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Step Information */}
                         {currentStepData && (
@@ -217,10 +256,13 @@ export const ParsingVisualizationTab: React.FC = () => {
                                 <div>
                                     <div className="text-sm text-blue-600 mb-1">Action:</div>
                                     <div className="font-medium text-blue-900">
-                                        {currentStepData.action.action_type.toUpperCase()}
-                                        {currentStepData.action.target !== undefined &&
+                                        {currentStepData.action?.type?.toUpperCase() || 'UNKNOWN'}
+                                        {currentStepData.action?.target !== null &&
                                             ` ${currentStepData.action.target}`
                                         }
+                                    </div>
+                                    <div className="text-xs text-blue-700 mt-1">
+                                        {currentStepData.action?.description || 'No description available'}
                                     </div>
                                 </div>
 
@@ -233,25 +275,47 @@ export const ParsingVisualizationTab: React.FC = () => {
 
                                 <div className="md:col-span-2">
                                     <div className="text-sm text-blue-600 mb-1">Explanation:</div>
-                                    <div className="text-blue-800">{currentStepData.explanation}</div>
+                                    <div className="text-blue-800">{currentStepData.explanation || 'No explanation available'}</div>
                                 </div>
                             </div>
                         )}
                     </div>
 
+                    {/* Derivation Progress - Prominent Display */}
+                    {currentStepData?.derivation_so_far && (
+                        <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
+                            <div className="flex items-center space-x-2 mb-2">
+                                <Target className="w-5 h-5 text-purple-600" />
+                                <h3 className="text-lg font-semibold text-purple-800">Derivation Progress</h3>
+                            </div>
+                            <div className="font-mono text-xl text-purple-900 bg-white p-3 rounded border">
+                                {currentStepData.derivation_so_far}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Visualizations */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                         {/* Stack Visualizer */}
-                        <div className="card p-6">
+                        <div className="card p-4 sm:p-6">
                             <h3 className="text-lg font-semibold mb-4">Parser Stack</h3>
                             <StackVisualizer />
                         </div>
 
                         {/* AST Visualizer */}
-                        <div className="card p-6">
+                        <div className="card p-4 sm:p-6">
                             <h3 className="text-lg font-semibold mb-4">Abstract Syntax Tree</h3>
                             <ASTVisualizer />
                         </div>
+                    </div>
+
+                    {/* New Interactive Components */}
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
+                        {/* Derivation Visualizer */}
+                        <DerivationVisualizer />
+
+                        {/* Action Trace Panel */}
+                        <ActionTracePanel />
                     </div>
 
                     {/* Parsing Summary */}
@@ -301,7 +365,7 @@ export const ParsingVisualizationTab: React.FC = () => {
                         className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 mx-auto"
                     >
                         {isParsing ? (
-                            <LoadingSpinner />
+                            <LoadingSpinner size="sm" color="white" />
                         ) : (
                             <Play className="w-5 h-5" />
                         )}

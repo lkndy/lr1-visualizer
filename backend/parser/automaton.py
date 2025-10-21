@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from parser.grammar import Grammar
+from parser.grammar_v2 import Grammar
 from parser.items import ItemSet, LR1Item, extend_grammar_with_first, extend_grammar_with_follow
 from parser.types import Symbol, SymbolType
 

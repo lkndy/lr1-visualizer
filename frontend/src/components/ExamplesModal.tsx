@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Play, FileText, Code, Zap } from 'lucide-react';
-import { useParserStore, getExampleGrammars } from '../store/parserStore';
+import { useParserStore } from '../store/parserStore';
+import { getExampleGrammars } from '../api/client';
 import { ExampleGrammar } from '../types/parser';
 
 interface ExamplesModalProps {
@@ -91,8 +92,8 @@ export const ExamplesModal: React.FC<ExamplesModalProps> = ({ isOpen, onClose })
                                         key={key}
                                         onClick={() => setSelectedCategory(key)}
                                         className={`w-full text-left p-3 rounded-lg transition-colors ${selectedCategory === key
-                                                ? 'bg-blue-100 text-blue-900 border border-blue-200'
-                                                : 'hover:bg-gray-100 text-gray-700'
+                                            ? 'bg-blue-100 text-blue-900 border border-blue-200'
+                                            : 'hover:bg-gray-100 text-gray-700'
                                             }`}
                                     >
                                         <div className="flex items-center space-x-3">

@@ -1,11 +1,13 @@
 """Generate sample strings from grammars for testing and demonstration."""
 
 import random
-from typing import List, Tuple
+from typing import List
 
-from parser.grammar import Grammar
+from parser.grammar_v2 import Grammar
 from parser.types import Production, Symbol, SymbolType
-from utils.debug import debug_log
+from debug.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class SampleGenerator:
@@ -22,7 +24,7 @@ class SampleGenerator:
         if count is None:
             count = self.max_samples
 
-        debug_log("🎲 Generating sample strings", {"count": count})
+        logger.debug("Generating sample strings", extra={"count": count})
 
         samples = []
         attempts = 0
@@ -34,9 +36,9 @@ class SampleGenerator:
                 sample = self._generate_single_sample()
                 if sample and sample not in samples:
                     samples.append(sample)
-                    debug_log("✅ Generated sample", {"sample": sample})
+                    logger.debug("Generated sample", extra={"sample": sample})
             except Exception as e:
-                debug_log("⚠️ Failed to generate sample", {"error": str(e)})
+                logger.warning("Failed to generate sample", extra={"error": str(e)})
                 continue
 
         # If we couldn't generate enough unique samples, add some shorter ones
