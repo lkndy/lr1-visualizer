@@ -20,13 +20,24 @@ class ParsingTable:
 
     def _build_tables(self) -> None:
         """Build the ACTION and GOTO tables."""
+        from debug.logger import get_logger
+
+        logger = get_logger(__name__)
+
+        logger.debug(f"Building parsing tables for {len(self.automaton.states)} states")
+
         self.action_table = {}
         self.goto_table = {}
 
         for state_index, state in enumerate(self.automaton.states):
+            logger.debug(f"Processing state {state_index}")
             self._process_reduce_items(state_index, state)
             self._process_shift_actions(state_index)
             self._process_goto_transitions(state_index)
+
+        logger.debug(f"Built tables: {len(self.action_table)} action entries, {len(self.goto_table)} goto entries")
+        logger.debug(f"Action table keys: {list(self.action_table.keys())[:10]}...")  # Show first 10 keys
+        logger.debug(f"Goto table keys: {list(self.goto_table.keys())[:10]}...")  # Show first 10 keys
 
     def _process_reduce_items(self, state_index: int, state: ItemSet) -> None:
         """Process reduce items for a given state."""
@@ -164,6 +175,12 @@ class ParsingTable:
 
     def export_action_table(self) -> dict:
         """Export ACTION table in a format suitable for frontend display."""
+        from debug.logger import get_logger
+
+        logger = get_logger(__name__)
+
+        logger.debug(f"Exporting action table with {len(self.action_table)} entries")
+
         # Collect all states and terminal symbols
         states = set()
         symbols = set()
@@ -178,6 +195,10 @@ class ParsingTable:
         states = sorted(list(states))
         symbols = sorted(list(symbols))
 
+        logger.debug(f"Action table: {len(states)} states, {len(symbols)} symbols")
+        logger.debug(f"States: {states}")
+        logger.debug(f"Symbols: {symbols}")
+
         # Create table structure
         table = {"headers": ["State", *symbols], "rows": []}
 
@@ -187,11 +208,11 @@ class ParsingTable:
                 key = (state, symbol)
                 action = self.action_table.get(key)
                 if action:
-                    if action.action_type == ActionType.SHIFT:
+                    if action.action_type == ActionType.SHIFT.value:
                         row.append(f"s{action.target}")
-                    elif action.action_type == ActionType.REDUCE:
+                    elif action.action_type == ActionType.REDUCE.value:
                         row.append(f"r{action.target}")
-                    elif action.action_type == ActionType.ACCEPT:
+                    elif action.action_type == ActionType.ACCEPT.value:
                         row.append("acc")
                     else:
                         row.append("")  # Error actions show as empty, not "err"
@@ -199,10 +220,31 @@ class ParsingTable:
                     row.append("")
             table["rows"].append(row)
 
+        # Log table structure for debugging
+        logger.debug(f"Exported action table: {len(table['rows'])} rows, {len(table['headers'])} headers")
+
+        # Check if table is empty (all cells are empty or "-")
+        has_data = any(
+            any(cell and cell != "" and cell != "-" for cell in row[1:])  # Skip state column
+            for row in table["rows"]
+        )
+
+        if not has_data:
+            logger.warning("Action table appears to be empty - all cells are empty or '-'")
+            logger.debug(f"Sample row: {table['rows'][0] if table['rows'] else 'No rows'}")
+        else:
+            logger.debug("Action table contains data")
+
         return table
 
     def export_goto_table(self) -> dict:
         """Export GOTO table in a format suitable for frontend display."""
+        from debug.logger import get_logger
+
+        logger = get_logger(__name__)
+
+        logger.debug(f"Exporting goto table with {len(self.goto_table)} entries")
+
         # Get all unique states and non-terminals
         states = set()
         non_terminals = set()
@@ -214,6 +256,10 @@ class ParsingTable:
         states = sorted(states)
         non_terminals = sorted(non_terminals)
 
+        logger.debug(f"Goto table: {len(states)} states, {len(non_terminals)} non-terminals")
+        logger.debug(f"States: {states}")
+        logger.debug(f"Non-terminals: {non_terminals}")
+
         # Create table structure
         table = {"headers": ["State", *non_terminals], "rows": []}
 
@@ -224,6 +270,21 @@ class ParsingTable:
                 goto_state = self.goto_table.get(key)
                 row.append(str(goto_state) if goto_state is not None else "")
             table["rows"].append(row)
+
+        # Log table structure for debugging
+        logger.debug(f"Exported goto table: {len(table['rows'])} rows, {len(table['headers'])} headers")
+
+        # Check if table is empty (all cells are empty or "-")
+        has_data = any(
+            any(cell and cell != "" and cell != "-" for cell in row[1:])  # Skip state column
+            for row in table["rows"]
+        )
+
+        if not has_data:
+            logger.warning("Goto table appears to be empty - all cells are empty or '-'")
+            logger.debug(f"Sample row: {table['rows'][0] if table['rows'] else 'No rows'}")
+        else:
+            logger.debug("Goto table contains data")
 
         return table
 

@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, FileText, Upload, Terminal, Hash, List, Eye, EyeOff } from 'lucide-react';
 import { useParserStore } from '../store/parserStore';
 import { GrammarEditor } from './GrammarEditor';
 import { ParsingTable } from './ParsingTable';
-import { AutomatonView } from './AutomatonView';
 import { LoadingSpinner, SkeletonCard, SkeletonText } from './LoadingSpinner';
 
 export const GrammarConfigTab: React.FC = () => {
@@ -18,6 +17,14 @@ export const GrammarConfigTab: React.FC = () => {
         showConflicts,
         setShowConflicts,
     } = useParserStore();
+
+    // Pagination state for LR(1) States
+    const [currentPage, setCurrentPage] = useState(1);
+
+    // Reset pagination when grammar changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [grammarInfo]);
 
     const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
         terminals: true,
@@ -133,36 +140,82 @@ export const GrammarConfigTab: React.FC = () => {
         items: string[];
         shift_symbols: string[];
         reduce_items: string[];
-    }>) => (
-        <div className="space-y-4">
-            {states.map((state, index) => (
-                <div key={index} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-semibold text-gray-900">State {state.state_number}</h4>
-                        <div className="flex space-x-2">
-                            {state.shift_symbols.length > 0 && (
-                                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                                    Shift: {state.shift_symbols.join(', ')}
-                                </span>
-                            )}
-                            {state.reduce_items.length > 0 && (
-                                <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-                                    Reduce: {state.reduce_items.length} items
-                                </span>
-                            )}
-                        </div>
+    }>) => {
+        const itemsPerPage = 9; // 3x3 grid
+
+        const totalPages = Math.ceil(states.length / itemsPerPage);
+        const startIdx = (currentPage - 1) * itemsPerPage;
+        const paginatedStates = states.slice(startIdx, startIdx + itemsPerPage);
+
+        const goToPage = (page: number) => {
+            setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+        };
+
+        return (
+            <div className="space-y-4">
+                {/* Pagination Controls */}
+                <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-600">
+                        Showing {startIdx + 1}-{Math.min(startIdx + itemsPerPage, states.length)} of {states.length} states
                     </div>
-                    <div className="space-y-1">
-                        {state.items.map((item, itemIndex) => (
-                            <div key={itemIndex} className="font-mono text-sm text-gray-700 bg-gray-50 px-2 py-1 rounded">
-                                {item}
-                            </div>
-                        ))}
+                    <div className="flex items-center space-x-2">
+                        <button
+                            onClick={() => goToPage(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Previous
+                        </button>
+                        <span className="text-sm text-gray-600">
+                            Page {currentPage} of {totalPages}
+                        </span>
+                        <button
+                            onClick={() => goToPage(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Next
+                        </button>
                     </div>
                 </div>
-            ))}
-        </div>
-    );
+
+                {/* States Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {paginatedStates.map((state, index) => (
+                        <div key={index} className="border border-gray-200 rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-3">
+                                <h4 className="font-semibold text-gray-900">State {state.state_number}</h4>
+                                <div className="flex flex-col space-y-1">
+                                    {state.shift_symbols.length > 0 && (
+                                        <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                                            Shift: {state.shift_symbols.slice(0, 2).join(', ')}{state.shift_symbols.length > 2 ? '...' : ''}
+                                        </span>
+                                    )}
+                                    {state.reduce_items.length > 0 && (
+                                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                                            Reduce: {state.reduce_items.length} items
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="space-y-1 max-h-32 overflow-y-auto">
+                                {state.items.slice(0, 4).map((item, itemIndex) => (
+                                    <div key={itemIndex} className="font-mono text-xs text-gray-700 bg-gray-50 px-2 py-1 rounded break-words">
+                                        {item.length > 40 ? item.substring(0, 40) + '...' : item}
+                                    </div>
+                                ))}
+                                {state.items.length > 4 && (
+                                    <div className="text-xs text-gray-500 text-center py-1">
+                                        +{state.items.length - 4} more items
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -365,22 +418,10 @@ export const GrammarConfigTab: React.FC = () => {
                             </SectionContent>
                         </div>
 
-                        {/* Automaton */}
-                        <div className="space-y-2">
-                            <SectionHeader
-                                id="automaton"
-                                title="LR(1) Automaton"
-                                icon={<Hash className="w-5 h-5 text-teal-600" />}
-                                badge={`${grammarInfo.num_states} states`}
-                                badgeColor="bg-teal-100 text-teal-800"
-                            />
-                            <SectionContent id="automaton">
-                                <AutomatonView />
-                            </SectionContent>
-                        </div>
                     </>
                 )}
             </div>
+
         </div>
     );
 };

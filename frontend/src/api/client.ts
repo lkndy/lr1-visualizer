@@ -1,6 +1,9 @@
 /** Typed API client for LR(1) parser backend. */
 
 import { GrammarValidationResponse, InteractiveDerivationResponse, ExampleGrammarsResponse } from '../types/parser';
+import { apiDebugger } from '../utils/apiDebug';
+import { dataValidator } from '../utils/dataValidator';
+import { logger } from '../utils/logger';
 
 // API configuration
 const API_BASE = 'http://localhost:8000/api/v1';
@@ -119,6 +122,15 @@ async function apiCall<T>(
     const url = `${API_BASE}${endpoint}`;
     const startTime = Date.now();
 
+    // Start request tracking
+    const requestId = apiDebugger.startRequest(
+        options.method || 'GET',
+        endpoint,
+        url,
+        options.body ? JSON.parse(options.body as string) : undefined,
+        options.headers as Record<string, string>
+    );
+
     logRequest(options.method || 'GET', endpoint, options.body ? JSON.parse(options.body as string) : undefined);
 
     try {
@@ -128,37 +140,71 @@ async function apiCall<T>(
                 'Content-Type': 'application/json',
                 ...options.headers,
             },
-        });
+        }, timeout);
 
         const duration = Date.now() - startTime;
         logResponse(endpoint, response.status, duration);
 
         if (!response.ok) {
             let errorMessage = `Request failed with status ${response.status}`;
+            let errorData: any = null;
+
             try {
-                const errorData = await response.json();
+                errorData = await response.json();
                 errorMessage = errorData.detail || errorData.message || errorMessage;
             } catch {
                 // If we can't parse the error response, use the status text
                 errorMessage = response.statusText || errorMessage;
             }
 
+            // Log error response
+            apiDebugger.endRequest(requestId, response.status, response.statusText, errorData, errorMessage);
+
             throw new APIError(errorMessage, response.status, endpoint);
         }
 
         const data = await response.json();
+
+        // Validate response data
+        if (endpoint.includes('/grammar/validate')) {
+            const validation = dataValidator.validateWithUserFeedback(
+                data,
+                'GrammarValidation',
+                (data, component) => dataValidator.validateGrammarResponse(data, component)
+            );
+            if (!validation.isValid) {
+                logger.warn('API', 'Grammar validation response has validation issues', validation.errors);
+            }
+        } else if (endpoint.includes('/parse/interactive')) {
+            const validation = dataValidator.validateWithUserFeedback(
+                data,
+                'ParsingResponse',
+                (data, component) => dataValidator.validateParsingResponse(data, component)
+            );
+            if (!validation.isValid) {
+                logger.warn('API', 'Parsing response has validation issues', validation.errors);
+            }
+        }
+
+        // Log successful response
+        apiDebugger.endRequest(requestId, response.status, response.statusText, data);
+
         return data as T;
 
     } catch (error) {
         const duration = Date.now() - startTime;
         logResponse(endpoint, 0, duration);
 
+        // Log error
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        apiDebugger.endRequest(requestId, 0, 'Network Error', null, errorMessage);
+
         if (error instanceof APIError || error instanceof TimeoutError) {
             throw error;
         }
 
         throw new APIError(
-            `Network error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            `Network error: ${errorMessage}`,
             undefined,
             endpoint
         );

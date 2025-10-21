@@ -1,7 +1,9 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
 import { useParserStore } from '../store/parserStore';
 import { LoadingSpinner, SkeletonTable } from './LoadingSpinner';
+import { dataValidator } from '../utils/dataValidator';
+import { logger } from '../utils/logger';
 
 export const ParsingTable: React.FC = () => {
   const {
@@ -19,6 +21,7 @@ export const ParsingTable: React.FC = () => {
 
   const [activeTable, setActiveTable] = useState<'action' | 'goto'>('action');
   const [hoveredCell, setHoveredCell] = useState<{ row: number, col: number, table: 'action' | 'goto' } | null>(null);
+  const [tableValidationErrors, setTableValidationErrors] = useState<string[]>([]);
 
   // Use computed selectors for current state and action
   const currentStepData = getCurrentStepData();
@@ -26,14 +29,62 @@ export const ParsingTable: React.FC = () => {
   const currentAction = getCurrentAction();
   const currentToken = currentStepData?.current_token;
 
+  // Validate table data on mount and when tables change
+  useEffect(() => {
+    logger.componentMount('ParsingTable', {
+      hasActionTable: !!actionTable,
+      hasGotoTable: !!gotoTable,
+      activeTable
+    });
+
+    const errors: string[] = [];
+
+    if (actionTable) {
+      const actionValidation = dataValidator.validateTableStructure(actionTable, 'ParsingTable.actionTable');
+      if (!actionValidation.isValid) {
+        errors.push(...actionValidation.errors.map(e => `Action Table: ${e.message}`));
+        logger.validationError('ParsingTable', 'Action table validation failed', actionValidation.errors);
+      }
+    }
+
+    if (gotoTable) {
+      const gotoValidation = dataValidator.validateTableStructure(gotoTable, 'ParsingTable.gotoTable');
+      if (!gotoValidation.isValid) {
+        errors.push(...gotoValidation.errors.map(e => `Goto Table: ${e.message}`));
+        logger.validationError('ParsingTable', 'Goto table validation failed', gotoValidation.errors);
+      }
+    }
+
+    setTableValidationErrors(errors);
+
+    if (errors.length > 0) {
+      logger.warn('COMPONENT', 'ParsingTable has validation issues', { errors });
+    }
+  }, [actionTable, gotoTable, activeTable]);
+
   const getCellClassName = useCallback((rowIndex: number, colIndex: number, tableType: 'action' | 'goto') => {
     let className = 'px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-200 transition-all duration-200 ';
 
-    if (tableType === 'action' && activeTable === 'action') {
+    // Validate inputs
+    if (typeof rowIndex !== 'number' || typeof colIndex !== 'number' || rowIndex < 0 || colIndex < 0) {
+      logger.warn('COMPONENT', 'Invalid cell coordinates', { rowIndex, colIndex, tableType });
+      return className + 'bg-red-100 text-red-800 ';
+    }
+
+    if (tableType === 'action' && activeTable === 'action' && actionTable) {
       // Check if this cell corresponds to current state and token
       if (rowIndex > 0 && colIndex > 0) {
         const state = rowIndex - 1; // Adjust for header row
-        const symbol = actionTable?.headers[colIndex];
+        const symbol = actionTable.headers?.[colIndex];
+
+        // Validate table structure
+        if (!Array.isArray(actionTable.headers) || !Array.isArray(actionTable.rows)) {
+          logger.warn('COMPONENT', 'Invalid action table structure', {
+            headers: actionTable.headers,
+            rows: actionTable.rows
+          });
+          return className + 'bg-red-100 text-red-800 ';
+        }
 
         // Highlight current action cell with enhanced styling
         if (state === currentState && symbol === currentToken) {
@@ -41,33 +92,44 @@ export const ParsingTable: React.FC = () => {
         }
 
         // Add action-specific styling with enhanced colors
-        const cellValue = actionTable?.rows[rowIndex]?.[colIndex];
-        if (cellValue) {
+        const cellValue = actionTable.rows[rowIndex]?.[colIndex];
+        if (cellValue && typeof cellValue === 'string') {
           if (cellValue.startsWith('s')) {
             className += 'bg-blue-100 text-blue-800 hover:bg-blue-200 ';
           } else if (cellValue.startsWith('r')) {
             className += 'bg-green-100 text-green-800 hover:bg-green-200 ';
           } else if (cellValue === 'acc') {
             className += 'bg-purple-100 text-purple-800 hover:bg-purple-200 ';
-          } else if (cellValue === '') {
+          } else if (cellValue === '' || cellValue === '-') {
             className += 'bg-red-100 text-red-800 hover:bg-red-200 ';
+          } else {
+            className += 'bg-gray-100 text-gray-800 hover:bg-gray-200 ';
           }
         } else {
           className += 'bg-gray-50 text-gray-400 hover:bg-gray-100 ';
         }
       }
-    } else if (tableType === 'goto' && activeTable === 'goto') {
+    } else if (tableType === 'goto' && activeTable === 'goto' && gotoTable) {
       // Similar logic for goto table
       if (rowIndex > 0 && colIndex > 0) {
         const state = rowIndex - 1;
-        const symbol = gotoTable?.headers[colIndex];
+        const symbol = gotoTable.headers?.[colIndex];
+
+        // Validate table structure
+        if (!Array.isArray(gotoTable.headers) || !Array.isArray(gotoTable.rows)) {
+          logger.warn('COMPONENT', 'Invalid goto table structure', {
+            headers: gotoTable.headers,
+            rows: gotoTable.rows
+          });
+          return className + 'bg-red-100 text-red-800 ';
+        }
 
         if (state === currentState && symbol === currentToken) {
           className += 'bg-yellow-200 border-2 border-yellow-500 font-bold text-yellow-900 animate-pulse-glow shadow-lg ';
         }
 
-        const cellValue = gotoTable?.rows[rowIndex]?.[colIndex];
-        if (cellValue) {
+        const cellValue = gotoTable.rows[rowIndex]?.[colIndex];
+        if (cellValue && typeof cellValue === 'string' && cellValue !== '' && cellValue !== '-') {
           className += 'bg-indigo-100 text-indigo-800 hover:bg-indigo-200 ';
         } else {
           className += 'bg-gray-50 text-gray-400 hover:bg-gray-100 ';
@@ -79,7 +141,42 @@ export const ParsingTable: React.FC = () => {
   }, [activeTable, currentState, currentToken, actionTable, gotoTable]);
 
   const renderTable = useCallback((table: typeof actionTable | typeof gotoTable, type: 'action' | 'goto') => {
-    if (!table) return null;
+    if (!table) {
+      logger.warn('COMPONENT', `No ${type} table data available`);
+      return (
+        <div className="text-center text-gray-500 py-8">
+          <Info className="w-8 h-8 mx-auto mb-2" />
+          <p>No {type} table data available</p>
+        </div>
+      );
+    }
+
+    // Validate table structure
+    if (!Array.isArray(table.headers) || !Array.isArray(table.rows)) {
+      logger.error('COMPONENT', `Invalid ${type} table structure`, {
+        headers: table.headers,
+        rows: table.rows
+      });
+      return (
+        <div className="text-center text-red-500 py-8">
+          <AlertTriangle className="w-8 h-8 mx-auto mb-2" />
+          <p>Invalid {type} table structure</p>
+        </div>
+      );
+    }
+
+    if (table.headers.length === 0 || table.rows.length === 0) {
+      logger.warn('COMPONENT', `Empty ${type} table`, {
+        headersCount: table.headers.length,
+        rowsCount: table.rows.length
+      });
+      return (
+        <div className="text-center text-yellow-500 py-8">
+          <Info className="w-8 h-8 mx-auto mb-2" />
+          <p>Empty {type} table</p>
+        </div>
+      );
+    }
 
     return (
       <div className="overflow-x-auto">
@@ -88,40 +185,52 @@ export const ParsingTable: React.FC = () => {
             <tr>
               {table.headers.map((header, index) => (
                 <th key={index} className={index === 0 ? 'state-header' : ''} scope="col">
-                  {header}
+                  {header || `Column ${index}`}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {table.rows.map((row, rowIndex) => (
-              <tr key={rowIndex}>
-                {row.map((cell, colIndex) => (
-                  <td
-                    key={colIndex}
-                    className={getCellClassName(rowIndex, colIndex, type)}
-                    title={
-                      rowIndex > 0 && colIndex > 0 &&
-                        (rowIndex - 1) === currentState &&
-                        table.headers[colIndex] === currentToken
-                        ? currentAction?.description || 'Current action'
-                        : undefined
-                    }
-                    onMouseEnter={() => setHoveredCell({ row: rowIndex, col: colIndex, table: type })}
-                    onMouseLeave={() => setHoveredCell(null)}
-                    role="gridcell"
-                    aria-label={`State ${rowIndex - 1}, Symbol ${table.headers[colIndex]}, Value: ${cell || 'empty'}`}
-                  >
-                    {cell || '-'}
-                  </td>
-                ))}
-              </tr>
-            ))}
+            {table.rows.map((row, rowIndex) => {
+              if (!Array.isArray(row)) {
+                logger.warn('COMPONENT', `Invalid row at index ${rowIndex}`, { row, rowIndex });
+                return null;
+              }
+
+              return (
+                <tr key={rowIndex}>
+                  {row.map((cell, colIndex) => {
+                    const cellValue = cell !== null && cell !== undefined ? String(cell) : '-';
+                    const header = table.headers[colIndex] || `Col ${colIndex}`;
+
+                    return (
+                      <td
+                        key={colIndex}
+                        className={getCellClassName(rowIndex, colIndex, type)}
+                        title={
+                          rowIndex > 0 && colIndex > 0 &&
+                            (rowIndex - 1) === currentState &&
+                            header === currentToken
+                            ? currentAction?.description || 'Current action'
+                            : undefined
+                        }
+                        onMouseEnter={() => setHoveredCell({ row: rowIndex, col: colIndex, table: type })}
+                        onMouseLeave={() => setHoveredCell(null)}
+                        role="gridcell"
+                        aria-label={`State ${rowIndex - 1}, Symbol ${header}, Value: ${cellValue}`}
+                      >
+                        {cellValue}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
     );
-  }, [getCellClassName, hoveredCell, currentAction, currentState, currentToken, setHoveredCell]);
+  }, [getCellClassName, currentAction, currentState, currentToken]);
 
   if (isGeneratingTable) {
     return (
@@ -148,6 +257,27 @@ export const ParsingTable: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Validation Errors */}
+      {tableValidationErrors.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-red-800 mb-2">
+                Table Validation Issues
+              </h3>
+              <div className="space-y-1">
+                {tableValidationErrors.map((error, index) => (
+                  <div key={index} className="text-sm text-red-700">
+                    • {error}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Table Summary */}
       {tableSummary && (
         <div className="card p-6">

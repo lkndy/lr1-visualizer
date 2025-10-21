@@ -14,6 +14,8 @@ import {
 } from '../types/parser';
 import { validateGrammar, parseInteractive, getExampleGrammars, APIError } from '../api/client';
 import debug from '../utils/debug';
+import { dataValidator } from '../utils/dataValidator';
+import { logger } from '../utils/logger';
 
 // Initial state
 const initialState: ParserState = {
@@ -102,6 +104,32 @@ export const useParserStore = create<ParserState & ParserActions>()(
         try {
           const response = await validateGrammar(grammarText, startSymbol);
 
+          // Validate response before setting state
+          const validation = dataValidator.validateWithUserFeedback(
+            response,
+            'GrammarValidation',
+            (data, component) => dataValidator.validateGrammarResponse(data, component)
+          );
+
+          if (!validation.isValid) {
+            logger.error('STORE', 'Grammar validation response failed validation', validation.errors);
+            set({
+              grammarValid: false,
+              grammarErrors: [{
+                type: 'validation_error',
+                message: 'Response validation failed. Check console for details.',
+              }],
+              grammarInfo: undefined,
+              isValidatingGrammar: false,
+            });
+            return;
+          }
+
+          logger.stateChange('ParserStore', 'validateGrammar', {
+            valid: response.valid,
+            hasGrammarInfo: !!response.grammar_info
+          });
+
           set({
             grammarValid: response.valid,
             grammarErrors: response.errors,
@@ -112,6 +140,19 @@ export const useParserStore = create<ParserState & ParserActions>()(
 
           // If grammar is valid, store the parsing table from the enhanced response
           if (response.valid && response.grammar_info?.parsing_table_preview) {
+            // Validate table data before storing
+            const actionTableValid = dataValidator.isParsingTableResponse({
+              action_table: response.grammar_info.parsing_table_preview.action_table,
+              goto_table: response.grammar_info.parsing_table_preview.goto_table,
+            });
+
+            if (!actionTableValid) {
+              logger.warn('STORE', 'Parsing table data validation failed', {
+                actionTable: response.grammar_info.parsing_table_preview.action_table,
+                gotoTable: response.grammar_info.parsing_table_preview.goto_table,
+              });
+            }
+
             set({
               actionTable: response.grammar_info.parsing_table_preview.action_table,
               gotoTable: response.grammar_info.parsing_table_preview.goto_table,
@@ -175,6 +216,37 @@ export const useParserStore = create<ParserState & ParserActions>()(
 
         try {
           const response = await parseInteractive(grammarText, inputString, startSymbol);
+
+          // Validate response before setting state
+          const validation = dataValidator.validateWithUserFeedback(
+            response,
+            'ParsingResponse',
+            (data, component) => dataValidator.validateParsingResponse(data, component)
+          );
+
+          if (!validation.isValid) {
+            logger.error('STORE', 'Parsing response failed validation', validation.errors);
+            set({
+              parsingSteps: [],
+              totalSteps: 0,
+              currentStep: 0,
+              ast: undefined,
+              parsingValid: false,
+              parsingError: 'Response validation failed. Check console for details.',
+              tokens: [],
+              currentToken: null,
+              derivationProgress: '',
+              currentStateInAutomaton: null,
+              isParsing: false,
+            });
+            return;
+          }
+
+          logger.stateChange('ParserStore', 'parseInput', {
+            success: response.success,
+            totalSteps: response.total_steps,
+            hasSteps: response.steps.length > 0
+          });
 
           // Update parsing state with new interactive derivation data
           set({

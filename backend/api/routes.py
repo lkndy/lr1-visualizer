@@ -1,15 +1,17 @@
 """FastAPI routes for LR(1) parser endpoints."""
 
 import json
+import time
 import traceback
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Request
 from parser import Automaton, ParserEngine, ParsingTable
 from parser.lark_grammar_v2 import parse_grammar_with_lark_v2
 from parser.sample_generator import generate_sample_strings
 from pydantic import BaseModel
 from debug.logger import get_logger, log_api_request, log_api_response
+from debug.api_validator import api_validator
 
 
 # Request/Response models
@@ -83,6 +85,39 @@ router = APIRouter(prefix="/api/v1", tags=["parser"])
 logger = get_logger(__name__)
 
 
+def validate_and_log_request(request: Request, endpoint: str, data: dict = None) -> str:
+    """Validate request and log with unique ID."""
+    request_id = api_validator.generate_request_id()
+
+    # Log request
+    api_validator.log_request(
+        request_id=request_id, method=request.method, endpoint=endpoint, data=data, headers=dict(request.headers)
+    )
+
+    return request_id
+
+
+def validate_and_log_response(
+    request_id: str, status_code: int, data: dict = None, duration_ms: float = 0, error: str = None
+) -> None:
+    """Validate response and log with validation results."""
+    # Validate response structure based on endpoint
+    validation_errors = []
+    if data:
+        if "valid" in data and "errors" in data:
+            # Grammar validation response
+            validation_errors = api_validator.validate_grammar_response(data)
+        elif "steps" in data and "total_steps" in data:
+            # Parsing response
+            validation_errors = api_validator.validate_parsing_response(data)
+
+    if validation_errors:
+        logger.warning(f"⚠️ [RESP-{request_id}] Validation errors: {validation_errors}")
+
+    # Log response
+    api_validator.log_response(request_id=request_id, status_code=status_code, data=data, duration_ms=duration_ms, error=error)
+
+
 def _raise_grammar_validation_error(errors: list) -> None:
     """Raise HTTP exception for grammar validation failure."""
     raise HTTPException(
@@ -100,8 +135,19 @@ def _raise_conflict_error() -> None:
 
 
 @router.post("/grammar/validate")
-async def validate_grammar(request: GrammarRequest) -> GrammarResponse:
+async def validate_grammar(request: GrammarRequest, http_request: Request) -> GrammarResponse:
     """Validate a grammar and return any errors."""
+    start_time = time.time()
+
+    # Validate request structure
+    request_data = request.model_dump()
+    validation_errors = api_validator.validate_grammar_request(request_data)
+    if validation_errors:
+        logger.error(f"❌ Invalid grammar request: {validation_errors}")
+        raise HTTPException(status_code=400, detail=f"Invalid request: {'; '.join(validation_errors)}")
+
+    # Generate request ID and log
+    request_id = validate_and_log_request(http_request, "/grammar/validate", request_data)
     log_api_request("POST", "/grammar/validate", {"start_symbol": request.start_symbol})
 
     try:
@@ -209,12 +255,15 @@ async def validate_grammar(request: GrammarRequest) -> GrammarResponse:
 
                 logger.info("Automaton and table built successfully")
 
-                return GrammarResponse(valid=True, errors=[], grammar_info=grammar_info)
+                response = GrammarResponse(valid=True, errors=[], grammar_info=grammar_info)
+                duration_ms = (time.time() - start_time) * 1000
+                validate_and_log_response(request_id, 200, response.model_dump(), duration_ms)
+                return response
 
             except Exception as e:
                 tb = traceback.format_exc()
                 logger.error(f"Automaton/table build failed: {e}", extra={"trace": tb})
-                return GrammarResponse(
+                response = GrammarResponse(
                     valid=False,
                     errors=[
                         {
@@ -225,11 +274,17 @@ async def validate_grammar(request: GrammarRequest) -> GrammarResponse:
                         },
                     ],
                 )
+                duration_ms = (time.time() - start_time) * 1000
+                validate_and_log_response(request_id, 200, response.model_dump(), duration_ms)
+                return response
         else:
-            return GrammarResponse(valid=False, errors=error_dicts)
+            response = GrammarResponse(valid=False, errors=error_dicts)
+            duration_ms = (time.time() - start_time) * 1000
+            validate_and_log_response(request_id, 200, response.model_dump(), duration_ms)
+            return response
 
     except Exception as e:
-        return GrammarResponse(
+        response = GrammarResponse(
             valid=False,
             errors=[
                 {
@@ -240,6 +295,9 @@ async def validate_grammar(request: GrammarRequest) -> GrammarResponse:
                 },
             ],
         )
+        duration_ms = (time.time() - start_time) * 1000
+        validate_and_log_response(request_id, 500, response.model_dump(), duration_ms, str(e))
+        return response
 
 
 @router.post("/parser/table")
@@ -339,28 +397,28 @@ async def get_example_grammars() -> dict[str, Any]:
     examples = {
         "arithmetic": {
             "name": "Arithmetic Expressions",
-            "description": "Simple arithmetic expressions with +, -, *, /, parentheses",
+            "description": "Simple arithmetic expressions with +, -, *, /, parentheses and operator precedence",
             "grammar": """E -> E + T | E - T | T
 T -> T * F | T / F | F
 F -> ( E ) | id | num""",
             "start_symbol": "E",
-            "sample_inputs": ["id + id * id", "id - num", "( id + num ) * id", "id / num + id"],
+            "sample_inputs": ["id + id * id", "id - num", "( id + num ) * id", "id / num + id", "( ( id + id ) * num ) - id"],
         },
         "simple_language": {
-            "name": "Simple Language",
-            "description": "Basic language with statements, expressions, and control flow",
+            "name": "Simple Programming Language",
+            "description": "Basic language with statements, expressions, and control flow constructs",
             "grammar": """S -> stmt_list
 stmt_list -> stmt stmt_list | stmt
-stmt -> id = expr | if expr then stmt | while expr do stmt
+stmt -> id = expr | if expr then stmt | while expr do stmt | { stmt_list }
 expr -> expr + term | expr - term | term
 term -> term * factor | term / factor | factor
 factor -> id | num | ( expr )""",
             "start_symbol": "S",
-            "sample_inputs": ["id = id + num", "if num then id = id", "while id do id = num"],
+            "sample_inputs": ["id = id + num", "if num then id = id", "while id do id = num", "{ id = num ; id = id + num }"],
         },
         "json": {
             "name": "JSON-like Structure",
-            "description": "Simplified JSON structure with objects and arrays",
+            "description": "Simplified JSON structure with objects, arrays, and nested data",
             "grammar": """value -> object | array | string | number | true | false | null
 object -> { pairs }
 pairs -> pair pairs_tail | ε
@@ -370,11 +428,138 @@ array -> [ elements ]
 elements -> value elements_tail | ε
 elements_tail -> , value elements_tail | ε""",
             "start_symbol": "value",
-            "sample_inputs": ['{ "key" : "value" }', '[ "item1" , "item2" ]', "true", "{ }"],
+            "sample_inputs": [
+                '{ "key" : "value" }',
+                '[ "item1" , "item2" ]',
+                "true",
+                "{ }",
+                '{ "name" : "John" , "age" : 25 }',
+            ],
+        },
+        "boolean_expressions": {
+            "name": "Boolean Expressions",
+            "description": "Boolean logic with AND, OR, NOT operators and parentheses",
+            "grammar": """expr -> expr OR term | term
+term -> term AND factor | factor
+factor -> NOT factor | ( expr ) | true | false | id""",
+            "start_symbol": "expr",
+            "sample_inputs": [
+                "true OR false",
+                "id AND NOT id",
+                "( true OR false ) AND true",
+                "NOT ( id OR false )",
+                "true AND true OR false",
+            ],
+        },
+        "simple_calculator": {
+            "name": "Simple Calculator",
+            "description": "Calculator with numbers, basic operations, and function calls",
+            "grammar": """expr -> expr + term | expr - term | term
+term -> term * factor | term / factor | factor
+factor -> ( expr ) | num | function_call
+function_call -> id ( expr )""",
+            "start_symbol": "expr",
+            "sample_inputs": [
+                "num + num",
+                "function_call ( num )",
+                "( num + num ) * num",
+                "num / function_call ( num )",
+                "num - num + num",
+            ],
+        },
+        "list_processing": {
+            "name": "List Processing",
+            "description": "Grammar for processing lists with elements and separators",
+            "grammar": """list -> [ elements ]
+elements -> element elements_tail | ε
+elements_tail -> , element elements_tail | ε
+element -> id | num | list""",
+            "start_symbol": "list",
+            "sample_inputs": ["[ id , num , id ]", "[ ]", "[ num ]", "[ id , [ id , num ] , id ]", "[ num , num , num ]"],
+        },
+        "conditional_statements": {
+            "name": "Conditional Statements",
+            "description": "If-then-else statements with boolean conditions",
+            "grammar": """stmt -> if condition then stmt else stmt | id = expr | block
+block -> { stmt_list }
+stmt_list -> stmt stmt_list | stmt
+condition -> expr relop expr
+expr -> id | num
+relop -> = | < | >""",
+            "start_symbol": "stmt",
+            "sample_inputs": [
+                "if id = num then id = num else id = num",
+                "{ id = num }",
+                "if id < num then { id = num } else id = num",
+                "id = num",
+            ],
+        },
+        "recursive_descent": {
+            "name": "Recursive Descent Example",
+            "description": "Simple grammar demonstrating left recursion and recursive structure",
+            "grammar": """S -> A
+A -> A + B | B
+B -> B * C | C
+C -> ( A ) | id""",
+            "start_symbol": "S",
+            "sample_inputs": ["id", "id + id", "id * id", "id + id * id", "( id + id )"],
+        },
+        "nested_structures": {
+            "name": "Nested Structures",
+            "description": "Grammar with nested parentheses and bracket structures",
+            "grammar": """structure -> ( content ) | [ content ] | { content }
+content -> structure content | id | ε""",
+            "start_symbol": "structure",
+            "sample_inputs": ["( id )", "[ id ]", "{ id }", "( [ id ] )", "{ ( id ) }", "(( id ))"],
+        },
+        "assignment_language": {
+            "name": "Assignment Language",
+            "description": "Simple language with variable assignments and expressions",
+            "grammar": """program -> stmt_list
+stmt_list -> stmt ; stmt_list | stmt
+stmt -> id = expr
+expr -> expr + term | expr - term | term
+term -> term * factor | term / factor | factor
+factor -> id | num | ( expr )""",
+            "start_symbol": "program",
+            "sample_inputs": [
+                "id = num",
+                "id = id + num ; id = num",
+                "id = ( id + num ) * num",
+                "id = num ; id = id - num ; id = id * num",
+            ],
         },
     }
 
     return {"examples": examples}
+
+
+@router.get("/debug/logs")
+async def get_debug_logs(format: str = "json", limit: int = 100) -> dict:
+    """Get debug logs for troubleshooting."""
+    try:
+        if format == "json":
+            logs = api_validator.get_recent_logs(limit)
+            return {"logs": logs, "total": len(api_validator.request_logs)}
+        elif format == "export":
+            filepath = api_validator.export_logs("json")
+            return {"message": f"Logs exported to {filepath}", "filepath": filepath}
+        else:
+            raise HTTPException(status_code=400, detail="Invalid format. Use 'json' or 'export'")
+    except Exception as e:
+        logger.error(f"Failed to get debug logs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/debug/logs")
+async def clear_debug_logs() -> dict:
+    """Clear all debug logs."""
+    try:
+        api_validator.clear_logs()
+        return {"message": "Debug logs cleared successfully"}
+    except Exception as e:
+        logger.error(f"Failed to clear debug logs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # WebSocket endpoint for real-time parsing
@@ -409,8 +594,21 @@ manager = ConnectionManager()
 
 
 @router.post("/parse/interactive", response_model=InteractiveDerivationResponse)
-async def parse_interactive_derivation(request: InteractiveDerivationRequest) -> InteractiveDerivationResponse:
+async def parse_interactive_derivation(
+    request: InteractiveDerivationRequest, http_request: Request
+) -> InteractiveDerivationResponse:
     """Parse input string with detailed interactive derivation steps."""
+    start_time = time.time()
+
+    # Validate request structure
+    request_data = request.model_dump()
+    validation_errors = api_validator.validate_parsing_request(request_data)
+    if validation_errors:
+        logger.error(f"❌ Invalid parsing request: {validation_errors}")
+        raise HTTPException(status_code=400, detail=f"Invalid request: {'; '.join(validation_errors)}")
+
+    # Generate request ID and log
+    request_id = validate_and_log_request(http_request, "/parse/interactive", request_data)
     log_api_request("parse_interactive_derivation", request.model_dump())
 
     try:
@@ -471,6 +669,8 @@ async def parse_interactive_derivation(request: InteractiveDerivationRequest) ->
             summary=summary,
         )
 
+        duration_ms = (time.time() - start_time) * 1000
+        validate_and_log_response(request_id, 200, response.model_dump(), duration_ms)
         log_api_response("parse_interactive_derivation", 200, response.model_dump())
         return response
 
@@ -489,6 +689,8 @@ async def parse_interactive_derivation(request: InteractiveDerivationRequest) ->
             summary={"error": error_msg},
         )
 
+        duration_ms = (time.time() - start_time) * 1000
+        validate_and_log_response(request_id, 500, response.model_dump(), duration_ms, error_msg)
         log_api_response("parse_interactive_derivation", 200, response.model_dump())
         return response
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Play, FileText, Code, Zap } from 'lucide-react';
+import { X, Play, FileText, Code, Zap, Calculator, List, GitBranch, Layers, Database, Brackets, Terminal } from 'lucide-react';
 import { useParserStore } from '../store/parserStore';
 import { getExampleGrammars } from '../api/client';
 import { ExampleGrammar } from '../types/parser';
@@ -23,6 +23,17 @@ export const ExamplesModal: React.FC<ExamplesModalProps> = ({ isOpen, onClose })
                 setSelectedCategory(Object.keys(response.examples)[0]);
             } catch (error) {
                 console.error('Failed to fetch examples:', error);
+                // Set some fallback examples for debugging
+                setExamples({
+                    'fallback': {
+                        name: 'Fallback Example',
+                        description: 'This is a fallback example for debugging',
+                        grammar: 'S -> A\nA -> id',
+                        start_symbol: 'S',
+                        sample_inputs: ['id']
+                    }
+                });
+                setSelectedCategory('fallback');
             } finally {
                 setIsLoading(false);
             }
@@ -46,23 +57,25 @@ export const ExamplesModal: React.FC<ExamplesModalProps> = ({ isOpen, onClose })
                 return <FileText className="w-5 h-5 text-green-600" />;
             case 'json':
                 return <Zap className="w-5 h-5 text-purple-600" />;
+            case 'boolean_expressions':
+                return <GitBranch className="w-5 h-5 text-orange-600" />;
+            case 'simple_calculator':
+                return <Calculator className="w-5 h-5 text-indigo-600" />;
+            case 'list_processing':
+                return <List className="w-5 h-5 text-pink-600" />;
+            case 'conditional_statements':
+                return <Layers className="w-5 h-5 text-cyan-600" />;
+            case 'recursive_descent':
+                return <Database className="w-5 h-5 text-teal-600" />;
+            case 'nested_structures':
+                return <Brackets className="w-5 h-5 text-yellow-600" />;
+            case 'assignment_language':
+                return <Terminal className="w-5 h-5 text-red-600" />;
             default:
                 return <FileText className="w-5 h-5 text-gray-600" />;
         }
     };
 
-    const getCategoryDescription = (category: string) => {
-        switch (category) {
-            case 'arithmetic':
-                return 'Mathematical expressions with operators and precedence';
-            case 'simple_language':
-                return 'Basic programming language constructs';
-            case 'json':
-                return 'Structured data format with objects and arrays';
-            default:
-                return 'Example grammar for learning LR(1) parsing';
-        }
-    };
 
     if (!isOpen) return null;
 
@@ -87,26 +100,32 @@ export const ExamplesModal: React.FC<ExamplesModalProps> = ({ isOpen, onClose })
                         <div className="p-4">
                             <h3 className="text-sm font-medium text-gray-700 mb-3">Categories</h3>
                             <div className="space-y-1">
-                                {Object.entries(examples).map(([key, example]) => (
-                                    <button
-                                        key={key}
-                                        onClick={() => setSelectedCategory(key)}
-                                        className={`w-full text-left p-3 rounded-lg transition-colors ${selectedCategory === key
-                                            ? 'bg-blue-100 text-blue-900 border border-blue-200'
-                                            : 'hover:bg-gray-100 text-gray-700'
-                                            }`}
-                                    >
-                                        <div className="flex items-center space-x-3">
-                                            {getCategoryIcon(key)}
-                                            <div>
-                                                <div className="font-medium">{example.name}</div>
-                                                <div className="text-xs text-gray-500">
-                                                    {example.sample_inputs.length} samples
+                                {Object.keys(examples).length === 0 ? (
+                                    <div className="text-sm text-gray-500 p-3">
+                                        No examples available
+                                    </div>
+                                ) : (
+                                    Object.entries(examples).map(([key, example]) => (
+                                        <button
+                                            key={key}
+                                            onClick={() => setSelectedCategory(key)}
+                                            className={`w-full text-left p-3 rounded-lg transition-colors ${selectedCategory === key
+                                                ? 'bg-blue-100 text-blue-900 border border-blue-200'
+                                                : 'hover:bg-gray-100 text-gray-700'
+                                                }`}
+                                        >
+                                            <div className="flex items-center space-x-3">
+                                                {getCategoryIcon(key)}
+                                                <div>
+                                                    <div className="font-medium">{example.name}</div>
+                                                    <div className="text-xs text-gray-500">
+                                                        {example.sample_inputs.length} samples
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </button>
-                                ))}
+                                        </button>
+                                    ))
+                                )}
                             </div>
                         </div>
                     </div>
@@ -129,7 +148,13 @@ export const ExamplesModal: React.FC<ExamplesModalProps> = ({ isOpen, onClose })
                             </div>
                         ) : (
                             <div className="flex items-center justify-center h-full">
-                                <p className="text-gray-600">No examples available</p>
+                                <div className="text-center">
+                                    <p className="text-gray-600 mb-2">No examples available</p>
+                                    <p className="text-sm text-gray-500">
+                                        Categories: {Object.keys(examples).length} |
+                                        Selected: {selectedCategory || 'none'}
+                                    </p>
+                                </div>
                             </div>
                         )}
                     </div>
