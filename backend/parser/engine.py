@@ -17,6 +17,7 @@ class ParseState:
     input_pointer: int
     step_number: int
     ast_nodes: dict[str, ASTNode]  # node_id -> ASTNode
+    ast_stack: list[str]  # Stack of AST node IDs corresponding to parser stack
     next_node_id: int
 
 
@@ -43,6 +44,10 @@ class ParserEngine:
         """Parse input string and return detailed interactive derivation information."""
         tokens = self._tokenize(input_string)
         steps = self._parse_tokens(tokens)
+        print("TOKENS:", tokens)
+        print("LAST ACTION:", steps[-1].action.action_type if steps else None)
+        # Build final AST from all steps
+        final_ast = self.get_ast(steps)
 
         # Create detailed derivation information
         derivation_info = {
@@ -51,6 +56,7 @@ class ParserEngine:
             "total_steps": len(steps),
             "success": len(steps) > 0 and steps[-1].action.action_type == ActionType.ACCEPT.value,
             "steps": [],
+            "ast": final_ast,  # Add the complete AST here
         }
 
         for i, step in enumerate(steps):
@@ -108,8 +114,8 @@ class ParserEngine:
             return ""
 
         # If it's a terminal, return its value
-        if root_node.get("type") == "terminal":
-            return root_node.get("value", "")
+        if root_node.get("symbol_type") == "terminal":
+            return root_node.get("symbol", "")
 
         # If it's a non-terminal, build from children
         children = root_node.get("children", [])
@@ -172,6 +178,7 @@ class ParserEngine:
             input_pointer=0,
             step_number=0,
             ast_nodes={},
+            ast_stack=[],  # Track AST nodes corresponding to stack
             next_node_id=0,
         )
 
@@ -181,6 +188,12 @@ class ParserEngine:
         while step_count < max_steps:
             step = self._execute_step(parse_state)
             steps.append(step)
+              # DEBUG
+            print(
+                f"[STEP {step.step_number}] action={step.action.action_type} "
+                f"target={step.action.target} token={step.current_token} "
+                f"stack={step.stack} ip={step.input_pointer} ast_nodes_created={step.ast_nodes}"
+            )
             step_count += 1
 
             if step.action.action_type in (ActionType.ACCEPT.value, ActionType.ERROR.value):
@@ -224,7 +237,7 @@ class ParserEngine:
         if action is None:
             action = ParsingAction(action_type=ActionType.ERROR, target=None)
             explanation = f"No action defined for state {current_state} and symbol '{current_token}'"
-        elif action.action_type == ActionType.SHIFT:
+        elif action.action_type == ActionType.SHIFT.value:
             explanation = f"Shift: Move to state {action.target} and push '{current_token}' onto stack"
             ast_nodes_created = self._handle_shift(
                 parse_state,
@@ -232,7 +245,7 @@ class ParserEngine:
                 action.target,
             )
 
-        elif action.action_type == ActionType.REDUCE:
+        elif action.action_type == ActionType.REDUCE.value:
             production = self.grammar.productions[action.target]
             explanation = f"Reduce: Apply production {production}"
             ast_nodes_created = self._handle_reduce(
@@ -241,7 +254,7 @@ class ParserEngine:
                 action.target,
             )
 
-        elif action.action_type == ActionType.ACCEPT:
+        elif action.action_type == ActionType.ACCEPT.value:
             explanation = "Accept: Input successfully parsed"
 
         else:
@@ -276,7 +289,10 @@ class ParserEngine:
         )
 
         parse_state.ast_nodes[node_id] = ast_node
-        ast_nodes_created.append(ast_node.dict())
+        parse_state.ast_stack.append(node_id)  # Track node on AST stack
+        
+        # Use model_dump() instead of dict() for Pydantic v2 compatibility
+        ast_nodes_created.append(ast_node.model_dump())
 
         return ast_nodes_created
 
@@ -288,17 +304,45 @@ class ParserEngine:
         node_id = f"node_{parse_state.next_node_id}"
         parse_state.next_node_id += 1
 
+        # Get child nodes from AST stack (corresponding to RHS of production)
+        rhs_length = len(production.rhs)
+        child_node_ids = []
+        
+        if rhs_length > 0:
+            # Get child nodes from the top of AST stack
+            child_node_ids = parse_state.ast_stack[-rhs_length:] if len(parse_state.ast_stack) >= rhs_length else []
+            # Remove them from AST stack
+            parse_state.ast_stack = parse_state.ast_stack[:-rhs_length] if len(parse_state.ast_stack) >= rhs_length else []
+
         ast_node = ASTNode(
             id=node_id,
             symbol=production.lhs.name,
             symbol_type=SymbolType.NON_TERMINAL,
-            children=[],
+            children=child_node_ids.copy(),
             parent=None,
             production_used=production_index,
         )
 
+        # Update parent relationships
+        for child_id in child_node_ids:
+            if child_id in parse_state.ast_nodes:
+                child_node = parse_state.ast_nodes[child_id]
+                # Create updated node with parent set
+                updated_child = ASTNode(
+                    id=child_node.id,
+                    symbol=child_node.symbol,
+                    symbol_type=child_node.symbol_type,
+                    children=child_node.children,
+                    parent=node_id,
+                    production_used=child_node.production_used,
+                )
+                parse_state.ast_nodes[child_id] = updated_child
+
         parse_state.ast_nodes[node_id] = ast_node
-        ast_nodes_created.append(ast_node.dict())
+        parse_state.ast_stack.append(node_id)  # Add new node to AST stack
+        
+        # Use model_dump() instead of dict() for Pydantic v2 compatibility
+        ast_nodes_created.append(ast_node.model_dump())
 
         return ast_nodes_created
 
@@ -311,6 +355,7 @@ class ParserEngine:
             input_pointer=parse_state.input_pointer,
             step_number=parse_state.step_number + 1,
             ast_nodes=parse_state.ast_nodes.copy(),
+            ast_stack=parse_state.ast_stack.copy(),
             next_node_id=parse_state.next_node_id,
         )
 
@@ -341,23 +386,50 @@ class ParserEngine:
 
     def get_ast(self, steps: list[ParsingStep]) -> dict[str, Any]:
         """Build final AST from parsing steps."""
-        # This is a simplified AST building - in a real implementation,
-        # you'd need to track parent-child relationships during parsing
-
+        print(f"DEBUG: get_ast called with {len(steps)} steps")
         ast_nodes = {}
+        
+        # Collect all AST nodes from all steps
         for step in steps:
             for node_data in step.ast_nodes:
                 ast_nodes[node_data["id"]] = node_data
 
-        return {"nodes": ast_nodes, "root": self._find_root_node(ast_nodes)}
+        # Find root node (should be the start symbol)
+        root_id = self._find_root_node(ast_nodes)
+        print(f"DEBUG: Root node found: {root_id}") 
+        
+        result = {
+        "nodes": ast_nodes,
+        "root": root_id
+        }   
+        print(f"DEBUG: Returning AST: {result}")
+        return result
+
 
     def _find_root_node(self, ast_nodes: dict[str, Any]) -> str | None:
         """Find the root node of the AST."""
-        # The root should be the start symbol
-        for node_id, node_data in ast_nodes.items():
-            if node_data["symbol"] == self.grammar.start_symbol.name:
+        start = self.grammar.start_symbol.name
+        keys = list(ast_nodes.keys())
+
+        # 1) Buscar en orden inverso la ÚLTIMA reducción del símbolo inicial (p.ej., 'S')
+        for node_id in reversed(keys):
+            if ast_nodes[node_id]["symbol"] == start:
                 return node_id
+
+        # 2) Fallback: último no terminal sin padre y con hijos
+        non_terms = {nt.name for nt in self.grammar.non_terminals}
+        for node_id in reversed(keys):
+            nd = ast_nodes[node_id]
+            if nd.get("parent") is None and nd.get("children") and nd["symbol"] in non_terms:
+                return node_id
+
+        # 3) Último recurso: último nodo sin padre
+        for node_id in reversed(keys):
+            if ast_nodes[node_id].get("parent") is None:
+                return node_id
+
         return None
+
 
     def validate_input(self, input_string: str) -> dict[str, Any]:
         """Validate input string and return parsing result."""
@@ -377,13 +449,13 @@ class ParserEngine:
                 return {
                     "valid": True,
                     "error": None,
-                    "steps": [step.dict() for step in steps],
+                    "steps": [step.model_dump() for step in steps],
                     "ast": self.get_ast(steps),
                 }
             return {
                 "valid": False,
                 "error": last_step.explanation,
-                "steps": [step.dict() for step in steps],
+                "steps": [step.model_dump() for step in steps],
                 "ast": None,
             }
 

@@ -42,65 +42,76 @@ export const ASTVisualizer: React.FC = () => {
     return () => window.removeEventListener('resize', updateDimensions);
   }, []);
 
-  useEffect(() => {
-    if (!ast || !ast.nodes) {
-      setNodes([]);
-      setEdges([]);
-      return;
-    }
+ useEffect(() => {
+  if (!ast || !ast.nodes) {
+    setNodes([]);
+    setEdges([]);
+    return;
+  }
 
-    // Build tree structure from AST nodes
-    const astNodes = Object.values(ast.nodes) as ASTNode[];
-    const nodeMap = new Map(astNodes.map(node => [node.id, node]));
+  // Build tree structure from AST nodes
+  const astNodes = Object.values(ast.nodes) as ASTNode[];
+  const nodeMap = new Map(astNodes.map(node => [node.id, node]));
 
-    // Find root node
-    const rootNode = astNodes.find(node => !node.parent) || astNodes[0];
-    if (!rootNode) return;
+  // Find root node
+  const rootNode = ast.root ? nodeMap.get(ast.root) : astNodes[0];
+  if (!rootNode) return;
 
-    // Create hierarchical layout
-    const treeData = buildTreeStructure(rootNode, nodeMap);
-    const layout = d3.tree<{ id: string; symbol: string; nodeType: string }>()
-      .size([dimensions.width - 40, dimensions.height - 40]);
+  // Create hierarchical layout
+  const treeData = buildTreeStructure(rootNode, nodeMap);
+  const layout = d3.tree<{ id: string; symbol: string; nodeType: string }>()
+    .size([dimensions.width - 80, dimensions.height - 80]);
 
-    const root = d3.hierarchy(treeData);
-    layout(root);
+  const root = d3.hierarchy(treeData);
+  layout(root);
 
-    // Convert to visualization nodes and edges
-    const newNodes: ASTVisualizationNode[] = [];
-    const newEdges: ASTVisualizationEdge[] = [];
+  // Convert to visualization nodes and edges
+  const newNodes: ASTVisualizationNode[] = [];
+  const newEdges: ASTVisualizationEdge[] = [];
 
-    root.descendants().forEach((d, index) => {
-      const node = nodeMap.get(d.data.id);
-      if (node) {
-        newNodes.push({
-          id: node.id,
-          symbol: node.symbol,
-          x: d.x || 0,
-          y: d.y || 0,
+  // Collect all nodes and edges from D3 hierarchy
+  root.descendants().forEach((d) => {
+    const node = nodeMap.get(d.data.id);
+    if (node) {
+      newNodes.push({
+        id: node.id,
+        symbol: node.symbol,
+        x: d.x || 0,
+        y: d.y || 0,
+        isNew: currentStep > 0 && parsingSteps[currentStep]?.ast_nodes?.some(
+          astNode => astNode.id === node.id
+        ) || false,
+        isHighlighted: false,
+        nodeType: node.symbol_type as 'terminal' | 'non_terminal' | 'epsilon',
+      });
+
+      // Create edge from parent to this node
+      if (d.parent) {
+        newEdges.push({
+          id: `${d.parent.data.id}-${d.data.id}`,
+          source: d.parent.data.id,
+          target: d.data.id,
           isNew: currentStep > 0 && parsingSteps[currentStep]?.ast_nodes?.some(
             astNode => astNode.id === node.id
           ) || false,
           isHighlighted: false,
-          nodeType: node.symbol_type as 'terminal' | 'non_terminal' | 'epsilon',
         });
-
-        if (d.parent) {
-          newEdges.push({
-            id: `${d.parent.data.id}-${d.data.id}`,
-            source: d.parent.data.id,
-            target: d.data.id,
-            isNew: currentStep > 0 && parsingSteps[currentStep]?.ast_nodes?.some(
-              astNode => astNode.id === node.id
-            ) || false,
-            isHighlighted: false,
-          });
-        }
       }
-    });
+    }
+  });
 
-    setNodes(newNodes);
-    setEdges(newEdges);
-  }, [ast, currentStep, parsingSteps, dimensions]);
+  // Debug logging
+  console.log('🌳 AST Debug Info:');
+  console.log('Root:', rootNode.id, rootNode.symbol);
+  console.log('Total nodes:', newNodes.length);
+  console.log('Total edges:', newEdges.length);
+  console.log('Tree data structure:', JSON.stringify(treeData, null, 2));
+  console.log('Nodes:', newNodes.map(n => `${n.id}(${n.symbol})`));
+  console.log('Edges:', newEdges.map(e => `${e.source} → ${e.target}`));
+
+  setNodes(newNodes);
+  setEdges(newEdges);
+}, [ast, currentStep, parsingSteps, dimensions]);
 
   const buildTreeStructure = (node: ASTNode, nodeMap: Map<string, ASTNode>): any => {
     const children = node.children
@@ -142,84 +153,99 @@ export const ASTVisualizer: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    if (!svgRef.current || nodes.length === 0) return;
+ useEffect(() => {
+  if (!svgRef.current || nodes.length === 0) return;
 
-    const svg = d3.select(svgRef.current);
-    svg.selectAll('*').remove();
+  const svg = d3.select(svgRef.current);
+  svg.selectAll('*').remove();
 
-    // Create container for zooming and panning
-    const container = svg.append('g');
+  // Define margins
+  const margin = { top: 40, right: 40, bottom: 40, left: 40 };
+  const width = dimensions.width - margin.left - margin.right;
+  const height = dimensions.height - margin.top - margin.bottom;
 
-    // Add zoom behavior
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.1, 3])
-      .on('zoom', (event) => {
-        container.attr('transform', event.transform);
-      });
+  // Create container with margin offset
+  const container = svg.append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
 
-    svg.call(zoom);
+  // Add zoom behavior
+  const zoom = d3.zoom<SVGSVGElement, unknown>()
+    .scaleExtent([0.1, 3])
+    .on('zoom', (event) => {
+      container.attr('transform', `translate(${margin.left},${margin.top}) ${event.transform}`);
+    });
 
-    // Draw edges
-    const link = container.selectAll('.link')
-      .data(edges)
-      .enter()
-      .append('path')
-      .attr('class', 'link')
-      .attr('d', (d) => {
-        const sourceNode = nodes.find(n => n.id === d.source);
-        const targetNode = nodes.find(n => n.id === d.target);
+  svg.call(zoom);
 
-        if (!sourceNode || !targetNode) return '';
+  // Draw edges FIRST (so they appear behind nodes)
+  const link = container.selectAll('.link')
+    .data(edges)
+    .enter()
+    .append('path')
+    .attr('class', 'link')
+    .attr('d', (d) => {
+      const sourceNode = nodes.find(n => n.id === d.source);
+      const targetNode = nodes.find(n => n.id === d.target);
 
-        return `M ${sourceNode.x} ${sourceNode.y} L ${targetNode.x} ${targetNode.y}`;
-      })
-      .attr('stroke', (d) => d.isNew ? '#3b82f6' : '#6b7280')
-      .attr('stroke-width', (d) => d.isNew ? 3 : 2)
-      .attr('stroke-dasharray', (d) => d.isNew ? '5,5' : 'none')
-      .attr('opacity', (d) => d.isNew ? 0.8 : 0.6);
+      if (!sourceNode || !targetNode) {
+        console.log('Missing node for edge:', d);
+        return '';
+      }
 
-    // Draw nodes
-    const node = container.selectAll('.node')
-      .data(nodes)
-      .enter()
-      .append('g')
-      .attr('class', 'node')
-      .attr('transform', (d) => `translate(${d.x},${d.y})`);
+      // Draw line from source to target
+      return `M ${sourceNode.x} ${sourceNode.y} L ${targetNode.x} ${targetNode.y}`;
+    })
+    .attr('fill', 'none')
+    .attr('stroke', (d) => d.isNew ? '#3b82f6' : '#6b7280')
+    .attr('stroke-width', (d) => d.isNew ? 4 : 3)
+    .attr('stroke-dasharray', (d) => d.isNew ? '5,5' : 'none')
+    .attr('opacity', (d) => d.isNew ? 0.8 : 0.6);
 
-    // Add circles for nodes
-    node.append('circle')
-      .attr('r', (d) => getNodeSize(d.nodeType))
-      .attr('fill', (d) => getNodeColor(d.nodeType, d.isHighlighted))
-      .attr('stroke', (d) => d.isNew ? '#3b82f6' : '#ffffff')
-      .attr('stroke-width', (d) => d.isNew ? 3 : 2)
-      .attr('opacity', (d) => d.isNew ? 0.9 : 1);
+  console.log('Edges drawn:', edges.length);
+  console.log('Sample edge:', edges[0]);
+  console.log('Sample nodes:', nodes.slice(0, 3));
 
-    // Add text labels
-    node.append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', '.35em')
-      .attr('fill', '#ffffff')
-      .attr('font-size', '12px')
-      .attr('font-weight', 'bold')
-      .text((d) => d.symbol);
+  // Draw nodes AFTER (so they appear on top)
+  const node = container.selectAll('.node')
+    .data(nodes)
+    .enter()
+    .append('g')
+    .attr('class', 'node')
+    .attr('transform', (d) => `translate(${d.x},${d.y})`);
 
-    // Add animations for new nodes
-    if (nodes.some(n => n.isNew)) {
-      node.filter(d => d.isNew)
-        .style('opacity', 0)
-        .transition()
-        .duration(500)
-        .style('opacity', 1);
+  // Add circles for nodes
+  node.append('circle')
+    .attr('r', (d) => getNodeSize(d.nodeType))
+    .attr('fill', (d) => getNodeColor(d.nodeType, d.isHighlighted))
+    .attr('stroke', (d) => d.isNew ? '#3b82f6' : '#ffffff')
+    .attr('stroke-width', (d) => d.isNew ? 3 : 2)
+    .attr('opacity', (d) => d.isNew ? 0.9 : 1);
 
-      link.filter(d => d.isNew)
-        .style('opacity', 0)
-        .transition()
-        .duration(500)
-        .style('opacity', 0.8);
-    }
+  // Add text labels
+  node.append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dy', '.35em')
+    .attr('fill', '#ffffff')
+    .attr('font-size', '12px')
+    .attr('font-weight', 'bold')
+    .text((d) => d.symbol);
 
-  }, [nodes, edges, dimensions]);
+  // Add animations for new nodes
+  if (nodes.some(n => n.isNew)) {
+    node.filter(d => d.isNew)
+      .style('opacity', 0)
+      .transition()
+      .duration(500)
+      .style('opacity', 1);
+
+    link.filter(d => d.isNew)
+      .style('opacity', 0)
+      .transition()
+      .duration(500)
+      .style('opacity', 0.8);
+  }
+
+}, [nodes, edges, dimensions]);
 
   const nodeTypeCounts = nodes.reduce((acc, node) => {
     acc[node.nodeType] = (acc[node.nodeType] || 0) + 1;

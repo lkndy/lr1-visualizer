@@ -248,12 +248,18 @@ export const useParserStore = create<ParserState & ParserActions>()(
             hasSteps: response.steps.length > 0
           });
 
+          // ⭐ FIXED: Now properly saves the AST from response
+          // The backend returns the AST in response.ast (as we saw in engine.py line 58)
+          console.log('📦 Respuesta completa del parsing:', response);
+          console.log('🌳 AST recibido del backend:', response.ast);
+          console.log('📊 Nodos en el AST:', response.ast?.nodes ? Object.keys(response.ast.nodes).length : 0);
+
           // Update parsing state with new interactive derivation data
           set({
             parsingSteps: response.steps,
             totalSteps: response.total_steps,
             currentStep: 0,
-            ast: undefined, // AST is now embedded in steps
+            ast: response.ast || undefined, // ⭐ CRITICAL FIX: Save the AST from response
             parsingValid: response.success,
             parsingError: response.error,
             tokens: response.tokens,
@@ -262,12 +268,26 @@ export const useParserStore = create<ParserState & ParserActions>()(
             currentStateInAutomaton: response.steps[0]?.stack[response.steps[0].stack.length - 1]?.[0] || null,
             isParsing: false,
           });
+
+          // Verify AST was saved correctly
+          const savedAST = get().ast;
+          if (savedAST && savedAST.nodes) {
+            console.log('✅ AST guardado exitosamente en el store');
+            console.log('✅ Total de nodos guardados:', Object.keys(savedAST.nodes).length);
+            console.log('✅ Nodo raíz:', savedAST.root);
+          } else {
+            console.warn('⚠️ AST no se guardó correctamente o está vacío');
+            console.warn('⚠️ response.ast era:', response.ast);
+          }
+
         } catch (error) {
           const errorMessage = error instanceof APIError
             ? error.message
             : error instanceof Error
               ? error.message
               : 'Unknown error';
+
+          console.error('❌ Error al parsear:', errorMessage);
 
           set({
             parsingSteps: [],

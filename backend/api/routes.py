@@ -76,6 +76,7 @@ class InteractiveDerivationResponse(BaseModel):
     success: bool
     steps: list[dict[str, Any]]
     summary: dict[str, Any]
+    ast: dict[str, Any] | None = None   
 
 
 # Create router
@@ -667,6 +668,7 @@ async def parse_interactive_derivation(
             success=derivation_info["success"],
             steps=derivation_info["steps"],
             summary=summary,
+            ast=derivation_info.get("ast"),
         )
 
         duration_ms = (time.time() - start_time) * 1000

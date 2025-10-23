@@ -10,21 +10,21 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/react-syntax-highlighter": "^15.5.7",
+    "d3": "^7.8.5",
+    "framer-motion": "^10.16.4",
+    "lucide-react": "^0.292.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "framer-motion": "^10.16.4",
-    "d3": "^7.8.5",
-    "reactflow": "^11.10.1",
-    "zustand": "^4.4.7",
-    "socket.io-client": "^4.7.4",
     "react-syntax-highlighter": "^15.5.0",
-    "lucide-react": "^0.292.0",
-    "@types/react-syntax-highlighter": "^15.5.7"
+    "reactflow": "^11.10.1",
+    "socket.io-client": "^4.7.4",
+    "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "@types/d3": "^7.4.3",
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",
-    "@types/d3": "^7.4.3",
     "@typescript-eslint/eslint-plugin": "^6.10.0",
     "@typescript-eslint/parser": "^6.10.0",
     "@vitejs/plugin-react": "^4.1.1",
